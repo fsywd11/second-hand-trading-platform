@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.itheima.mapper.GoodsMapper">
+    <sql id="Base_Column_List">
+        g.id, g.goods_name, g.goods_pic, g.category_id, g.sell_price, g.is_new, g.goods_status, g.stock, g.create_time,
+        u.nickname as seller_nickname, c.category_name as category_name,u.user_pic as seller_pic
+    </sql>
+
+    <select id="list" parameterType="com.itheima.DTO.GoodsQueryDTO" resultType="com.itheima.vo.GoodsVO">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM goods g
+        LEFT JOIN user u ON g.seller_id = u.id
+        LEFT JOIN shop_category c ON g.category_id = c.id
+        <where>
+            <if test="goodsName != null and goodsName != ''">
+                AND g.goods_name LIKE CONCAT('%', #{goodsName}, '%')
+            </if>
+            <if test="categoryId != null and categoryId != 0">
+                AND g.category_id = #{categoryId}
+            </if>
+            <if test="goodsStatus != null">
+                AND g.goods_status = #{goodsStatus}
+            </if>
+            <if test="isNew != null">
+                AND g.is_new = #{isNew}
+            </if>
+            <if test="minPrice != null">
+                AND g.sell_price >= #{minPrice}
+            </if>
+            <if test="maxPrice != null">
+                AND g.sell_price &lt;= #{maxPrice}
+            </if>
+            <if test="sellerId != null">
+                AND g.seller_id = #{sellerId}
+            </if>
+        </where>
+        ORDER BY g.create_time
+    </select>
+
+    <update id="update" parameterType="com.itheima.pojo.Goods">
+        UPDATE goods
+        <set>
+            <if test="goodsName != null and goodsName != ''">goods_name = #{goodsName},</if>
+            <if test="goodsDesc != null">goods_desc = #{goodsDesc},</if>
+            <if test="goodsPic != null">goods_pic = #{goodsPic},</if>
+            <if test="categoryId != null">category_id = #{categoryId},</if>
+            <if test="originalPrice != null">original_price = #{originalPrice},</if>
+            <if test="sellPrice != null">sell_price = #{sellPrice},</if>
+            <if test="goodsStatus != null">goods_status = #{goodsStatus},</if>
+            <if test="isNew != null">is_new = #{isNew},</if>
+            <if test="stock != null">stock = #{stock},</if>
+            update_time = #{updateTime}
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE goods
+        SET goods_status = #{status}, update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <insert id="insertGoodsImages">
+        INSERT INTO goods_image (goods_id, image_url, ext_info, create_time)
+        VALUES
+        <foreach collection="imageList" item="image" separator=",">
+            (
+            #{goodsId},
+            #{image.imageUrl},
+            #{image.extInfo},
+            NOW()
+            )
+        </foreach>
+    </insert>
+
+    <select id="findSellerByUserId" resultType="com.itheima.vo.BuyerViewSellerVO">
+        SELECT
+            u.id AS sellerId,
+            u.nickname AS sellerNickname,
+            u.user_pic AS sellerAvatar,
+            COUNT(g.id) AS publishGoodsCount
+        FROM
+            goods g
+                INNER JOIN user u ON g.seller_id = u.id
+        WHERE
+            u.id = #{userId}
+        GROUP BY
+            u.id, u.nickname, u.user_pic
+    </select>
+</mapper>

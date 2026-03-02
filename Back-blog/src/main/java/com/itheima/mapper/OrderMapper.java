@@ -1,0 +1,81 @@
+package com.itheima.mapper;
+
+import com.itheima.DTO.OrderQueryDTO;
+import com.itheima.pojo.OrderInfo;
+import com.itheima.vo.OrderVO;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * 订单Mapper（无关联表，含退款逻辑）
+ */
+public interface OrderMapper {
+    // 1. 创建订单（含商品冗余字段）
+    @Insert("INSERT INTO order_info (order_no, buyer_id, seller_id, address_id, goods_id, goods_name, goods_pic, goods_price, goods_num, total_amount, order_status, pay_type, remark, refund_status, refund_amount, create_time, update_time) " +
+            "VALUES (#{orderNo}, #{buyerId}, #{sellerId}, #{addressId}, #{goodsId}, #{goodsName}, #{goodsPic}, #{goodsPrice}, #{goodsNum}, #{totalAmount}, #{orderStatus}, #{payType}, #{remark}, 0, 0.00, #{createTime}, #{updateTime})")
+    void add(OrderInfo orderInfo);
+
+    // 2. 分页查询订单（含退款状态筛选）
+    List<OrderVO> list(OrderQueryDTO queryDTO);
+
+    // 3. 根据ID查询订单（含退款字段）
+    @Select("SELECT * FROM order_info WHERE id = #{id}")
+    OrderInfo findById(Integer id);
+
+    // 4. 修改订单（非状态类字段，含退款字段）
+    @Update("UPDATE order_info SET " +
+            "remark = #{remark}, " +
+            "pay_time = #{payTime}, " +
+            "delivery_time = #{deliveryTime}, " +
+            "receive_time = #{receiveTime}, " +
+            "cancel_time = #{cancelTime}, " +
+            "refund_status = #{refundStatus}, " +
+            "refund_amount = #{refundAmount}, " +
+            "refund_reason = #{refundReason}, " +
+            "refund_time = #{refundTime}, " +
+            "refund_remark = #{refundRemark}, " +
+            "update_time = #{updateTime} " +
+            "WHERE id = #{id}")
+    void update(OrderInfo orderInfo);
+
+    // 5. 更新订单状态
+    @Update("UPDATE order_info SET " +
+            "order_status = #{status}, " +
+            "update_time = #{updateTime} " +
+            "WHERE id = #{id}")
+    void updateStatus(@Param("id") Integer id, @Param("status") Integer status, @Param("updateTime") LocalDateTime updateTime);
+
+    // 6. 申请退款（更新退款状态为“退款中”）
+    @Update("UPDATE order_info SET " +
+            "refund_status = #{refundStatus}, " +
+            "refund_amount = #{refundAmount}, " +
+            "refund_reason = #{refundReason}, " +
+            "refund_remark = #{refundRemark}, " +
+            "update_time = #{updateTime} " +
+            "WHERE id = #{orderId}")
+    void applyRefund(@Param("orderId") Integer orderId,
+                     @Param("refundStatus") Integer refundStatus,
+                     @Param("refundAmount") BigDecimal refundAmount,
+                     @Param("refundReason") String refundReason,
+                     @Param("refundRemark") String refundRemark,
+                     @Param("updateTime") LocalDateTime updateTime);
+
+    // 7. 处理退款（更新退款状态、退款时间、备注）
+    @Update("UPDATE order_info SET " +
+            "refund_status = #{refundStatus}, " +
+            "refund_time = #{refundTime}, " +
+            "refund_remark = #{refundRemark}, " +
+            "update_time = #{updateTime} " +
+            "WHERE id = #{orderId}")
+    void handleRefund(@Param("orderId") Integer orderId,
+                      @Param("refundStatus") Integer refundStatus,
+                      @Param("refundRemark") String refundRemark,
+                      @Param("refundTime") LocalDateTime refundTime,
+                      @Param("updateTime") LocalDateTime updateTime);
+}
