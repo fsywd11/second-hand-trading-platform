@@ -3,13 +3,11 @@ package com.itheima.mapper;
 import com.itheima.DTO.AddressQueryDTO;
 import com.itheima.pojo.Address;
 import com.itheima.vo.AddressVO;
-import org.apache.ibatis.annotations.Delete;
-import org.apache.ibatis.annotations.Insert;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
+@Mapper
 public interface AddressMapper {
     // 新增地址
     @Insert("INSERT INTO address(address_name, province, city, district, detail_addr, zip_code, is_default, create_time, update_time, user_id) " +

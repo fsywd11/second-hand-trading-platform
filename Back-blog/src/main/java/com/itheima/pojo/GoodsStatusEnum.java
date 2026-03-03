@@ -7,7 +7,7 @@ import lombok.Getter;
      */
     public enum GoodsStatusEnum {
         ON_SALE(1, "在售"),
-        SOLD_OUT(2, ""),
+        SOLD_OUT(2, "已售罄"),
         OFF_SHELF(3, "下架"),
         AUDITING(4, "审核中"),
         VIOLATION(5, "违规封禁");
