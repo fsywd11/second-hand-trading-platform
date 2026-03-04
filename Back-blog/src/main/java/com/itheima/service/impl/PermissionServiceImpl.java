@@ -33,6 +33,8 @@ public class PermissionServiceImpl implements PermissionService {
         if (userId == null || userId <= 0) {
             throw new IllegalArgumentException("用户ID无效！");
         }
+        // 【补充】权限查询前，清理用户权限缓存
+        clearUserPermissionCache();
 
         // 2. 构造缓存Key（格式：user:permission:1）
         String cacheKey = String.format(PERMISSION_KEY, userId);

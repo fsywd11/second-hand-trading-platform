@@ -217,8 +217,8 @@ const routes = [
                 component: ()=>import("@/views/user/UserInfo.vue")
             },
             {
-                path: '/user/resetPassword',
-                name: 'UserResetPassword',
+                path: '/homes/resetPassword',
+                name: 'HomesResetPassword',
                 meta:{
                     title:'重置密码'
                 },
@@ -242,14 +242,23 @@ const routes = [
                 },
                 component: ()=>import("@/views/home/HomesMyFoot.vue")
             },
-            //我的订单
+            //我买到的订单
             {
-                path: '/homes/myorder',
-                name: 'HomesMyOrder',
+                path: '/homes/myBought',
+                name: 'HomesMyBought',
                 meta:{
-                    title:'订单'
+                    title:'我买到的订单'
                 },
-                component: ()=>import("@/views/home/HomesMyOrder.vue")
+                component: ()=>import("@/views/home/HomesMyBought.vue")
+            },
+            //我卖出的订单
+            {
+                path: '/homes/mySold',
+                name: 'HomesMySold',
+                meta:{
+                    title:'我卖出的订单'
+                },
+                component: ()=>import("@/views/home/HomesMySold.vue")
             },
         ]
     },
@@ -286,7 +295,6 @@ const routes = [
                     }
                 ]
             },
-
             {
                 path: '/goods/detail/:id',
                 name: 'HomesDetail',
@@ -340,6 +348,15 @@ const routes = [
                     title:'卖家信息'
                 },
                 component: ()=>import("@/views/home/HomesSellerDetail.vue")
+            },
+            // 支付页面
+            {
+                path: '/payment',
+                name: 'PaymentPage',
+                meta:{
+                    title:'确认订单'
+                },
+                component: ()=>import("@/views/home/PaymentPage.vue")
             },
         ]
     }

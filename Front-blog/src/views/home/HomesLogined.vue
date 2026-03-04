@@ -9,9 +9,6 @@ import { useTokenStore } from '@/stores/token.js';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter, useRoute } from 'vue-router';
 import Footer from "@/components/footer.vue";
-
-import Loading from "@/components/Loading.vue";
-
 const userInfoStore = useUserInfoStore();
 const tokenStore = useTokenStore();
 const router = useRouter();
@@ -22,9 +19,6 @@ const imgUrl = ref('');
 
 // 当前激活的菜单项
 const activeMenu = ref('home');
-// 路由过渡动画状态
-const routeTransitionName = ref('slide-fade');
-
 // 修正路由监听逻辑，确保菜单激活状态精准匹配
 watch(() => route.fullPath, (newFullPath) => {
   // 使用fullPath（包含query参数）进行匹配，避免参数变化时匹配失效
@@ -82,10 +76,10 @@ const handleMenuClick = (index) => {
       targetPath = '/homes/mygoods';
       break;
     case 'sold':
-      targetPath = '/homes/myorder';
+      targetPath = '/homes/mySold';
       break;
     case 'bought':
-      targetPath = '/homes/myorder?status=bought';
+      targetPath = '/homes/myBought';
       break;
     case 'collect':
       targetPath = '/homes/mycollect';
@@ -94,7 +88,7 @@ const handleMenuClick = (index) => {
       targetPath = '/homes/userinfo';
       break;
     case 'security':
-      targetPath = '/user/resetPassword';
+      targetPath = '/homes/resetPassword';
       break;
     case 'logout':
       handleLogout();
@@ -162,18 +156,13 @@ const handleMenuClick = (index) => {
       </aside>
 
       <main class="xianyu-main">
-        <transition :name="routeTransitionName" mode="out-in">
-          <router-view v-slot="{ Component, loading }">
-            <template v-if="loading">
-              <Loading />
-            </template>
-            <template v-else>
-              <keep-alive>
-                <component :is="Component" :key="route.fullPath" />
-              </keep-alive>
-            </template>
-          </router-view>
-        </transition>
+        <router-view v-slot="{ Component, route }">
+          <transition name="slide-fade" mode="out-in">
+            <keep-alive>
+              <component :is="Component" :key="route.fullPath" />
+            </keep-alive>
+          </transition>
+        </router-view>
       </main>
     </div>
   </div>

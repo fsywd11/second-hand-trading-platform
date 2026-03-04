@@ -113,7 +113,6 @@ async function getSellerInfo() {
   try {
     loading.value = true;
     const res = await goodsOpenDetailSellerService(sellerInfo.value.sellerId);
-    console.log('卖家信息:', res.data);
     if (res.data) {
       // 合并数据，保留默认值
       sellerInfo.value = {

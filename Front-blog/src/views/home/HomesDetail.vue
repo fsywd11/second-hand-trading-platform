@@ -1,10 +1,9 @@
 <script setup lang="js">
 import { onMounted, ref, watch, computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router'; // 新增useRouter
 import Footer from "@/components/footer.vue";
-import { ElMessage, ElAvatar, ElTag } from 'element-plus';
+import { ElMessage, ElAvatar, ElTag} from 'element-plus';
 import Comment from "@/components/Comment.vue";
-import router from "@/router/index.js";
 import { commentList } from "@/api/comment.js";
 import { goodsDetailService, goodsOpenListService, goodsOpenDetailSellerService } from "@/api/goods.js";
 import {ArrowLeftBold, ArrowRightBold, ChatDotRound, Shop, Star} from "@element-plus/icons-vue";
@@ -12,9 +11,12 @@ import {ArrowLeftBold, ArrowRightBold, ChatDotRound, Shop, Star} from "@element-
 // 引入真实的收藏 API
 import { goodsAddCollect, goodsDeleteCollect, goodsListByCollectId } from "@/api/likeCollect.js";
 import {useTokenStore} from "@/stores/token.js";
+// 新增：导入创建会话API
+import { createChatSessionService } from "@/api/chat.js";
 
 const loading = ref(false);
 const route = useRoute();
+const router = useRouter(); // 新增router实例
 const goodsId = ref(Number(route.params.id));
 const isTogglingCollect = ref(false); // 防抖开关，防止频繁点击
 const tokenStore = useTokenStore();
@@ -50,6 +52,48 @@ const sellerInfo = ref({
   sellerAvatar: '',
   publishGoodsCount: 0,
 });
+
+// ========== 新增：聊一聊核心方法 ==========
+// 检查登录状态
+const checkLogin = () => {
+  if (tokenStore.token === '') {
+    ElMessage.warning('请先登录后再发起聊天');
+    return false;
+  }
+  return true;
+};
+
+// 发起聊天（聊一聊按钮点击事件）
+const startChat = async () => {
+  // 1. 检查登录
+  if (!checkLogin()) return;
+
+  // 2. 获取卖家ID
+  const receiverId = goodsDetail.value.sellerId;
+  if (!receiverId) {
+    ElMessage.error('获取卖家信息失败，无法发起聊天');
+    return;
+  }
+
+  try {
+
+    // 3. 调用创建会话接口（无则创建，有则返回已有会话）
+    const res = await createChatSessionService(receiverId);
+    const sessionId = res.data.id;
+
+    // 4. 关闭loading并跳转到聊天页面
+    ElMessage.closeAll();
+    await router.push({
+      path: '/homes/notice', // 假设聊天页面路由为/chat
+      query: { sessionId } // 携带会话ID
+    });
+  } catch (error) {
+    ElMessage.closeAll();
+    console.error('创建聊天会话失败:', error);
+    ElMessage.error('发起聊天失败，请稍后重试');
+  }
+};
+
 
 // 当前选中的主图索引
 const currentImageIndex = ref(0);
@@ -228,6 +272,40 @@ onMounted(async () => {
 const goToSellerDetail=(sellerId)=>{
   router.push(`/seller/detail/${sellerId}`);
 }
+
+// 立即购买
+const handleBuyNow = () => {
+  // 调试：打印当前商品状态
+  console.log('handleBuyNow - 商品状态:', goodsDetail.value.goodsStatus, '类型:', typeof goodsDetail.value.goodsStatus);
+
+  // 检查是否登录
+  if (!tokenStore.token) {
+    ElMessage.warning('请先登录后再购买');
+    router.push('/homes/login');
+    return;
+  }
+
+  // 检查商品是否可购买（状态为 1-在售 才能购买）
+  // 兼容数字和字符串类型
+  const status = Number(goodsDetail.value.goodsStatus);
+  if (status !== 1) {
+    const statusMap = {
+      2: '已售罄',
+      3: '已下架',
+      4: '审核中',
+      5: '违规封禁'
+    };
+    const statusText = statusMap[status] || '不可购买';
+    ElMessage.warning(`该商品${statusText}`);
+    return;
+  }
+
+  // 跳转到支付页面，携带商品ID
+  router.push({
+    path: '/payment',
+    query: { goodsId: goodsId.value }
+  });
+}
 </script>
 
 <template>
@@ -298,11 +376,11 @@ const goToSellerDetail=(sellerId)=>{
 
             <div class="action-buttons fixed">
               <div class="main-btn-group">
-                <div class="btn want-btn" @click="() => ElMessage.info('点击了聊一聊')">
+                <div class="btn want-btn" @click="startChat">
                   <el-icon><ChatDotRound /></el-icon>
                   <span>聊一聊</span>
                 </div>
-                <div class="btn buy-btn" @click="() => ElMessage.info('点击了立即购买')">
+                <div class="btn buy-btn" @click="handleBuyNow">
                   <span>立即购买</span>
                 </div>
               </div>

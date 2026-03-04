@@ -13,7 +13,7 @@ public interface ChatSessionMapper {
     @Select("""
         SELECT cs.*, 
                u.nickname AS friendNickname, 
-               u.avatar AS friendAvatar
+               u.user_pic AS friendAvatar
         FROM chat_session cs
         LEFT JOIN user u ON 
             (cs.from_user_id = #{userId} AND u.id = cs.to_user_id) 

@@ -78,6 +78,12 @@ public class GoodsDetailVO implements Serializable {
      */
     private String sellerAvatar;
 
+
+    /**
+     * 商品状态：1-在售 2-已售出 3-下架 4-审核中 5-违规封禁
+     */
+    private Integer goodsStatus;
+
     /**
      * 商品状态名称
      */

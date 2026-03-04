@@ -115,7 +115,7 @@ const login = async () => {
       ElMessage.success('欢迎您，尊贵的管理员大人！');
       await router.push('/about/system');
     } else {
-      await router.push('/homes/logined');
+      await router.push('/homes/home');
     }
   } catch (error) {
     ElMessage.error('登录失败：' + (error.message || '网络异常'))

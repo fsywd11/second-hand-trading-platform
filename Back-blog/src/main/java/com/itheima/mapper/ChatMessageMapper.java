@@ -21,7 +21,7 @@ public interface ChatMessageMapper {
      * 查询会话历史消息
      */
     @Select("""
-        SELECT cm.*, u.nickname AS senderNickname, u.avatar AS senderAvatar
+        SELECT cm.*, u.nickname AS senderNickname, u.user_pic AS senderAvatar
         FROM chat_message cm
         LEFT JOIN user u ON cm.sender_id = u.id
         WHERE cm.session_id = #{sessionId}

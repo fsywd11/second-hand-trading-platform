@@ -91,7 +91,11 @@ public class OrderServiceImpl implements OrderService {
 
         // 扣减商品库存+更新商品状态为已售出
         goods.setStock(goods.getStock() - orderCreateDTO.getGoodsNum());
-        goods.setGoodsStatus(GoodsStatusEnum.SOLD_OUT.getCode());
+        //库存为零时
+        if (goods.getStock() == 0) {
+            // 改为已售罄
+            goods.setGoodsStatus(GoodsStatusEnum.SOLD_OUT.getCode());
+        }
         goods.setUpdateTime(LocalDateTime.now());
         goodsMapper.update(goods);
 

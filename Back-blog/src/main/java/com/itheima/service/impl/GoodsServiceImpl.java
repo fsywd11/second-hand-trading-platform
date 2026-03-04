@@ -131,6 +131,7 @@ public class GoodsServiceImpl implements GoodsService {
 
         // 补充枚举名称（移除标签相关逻辑）
         vo.setIsNewName(GoodsIsNewEnum.getNameByCode(goods.getIsNew()));
+        vo.setGoodsStatus(goods.getGoodsStatus());
         vo.setGoodsStatusName(GoodsStatusEnum.getNameByCode(goods.getGoodsStatus()));
         User seller = userMapper.findById(vo.getSellerId());
         vo.setSellerNickname(seller.getNickname());
