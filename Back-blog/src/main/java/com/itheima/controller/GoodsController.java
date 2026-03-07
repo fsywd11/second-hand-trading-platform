@@ -256,35 +256,48 @@ public class GoodsController {
         }
     }
 
+
     /**
      * 推荐模块商品查询（按分类关键词获取前3个商品）
      * 适配前端推荐模块展示需求
      */
     @PostMapping("/recommend/byKeyword")
-    @Operation(summary = "按关键词推荐商品", description = "根据分类关键词获取前3个在售商品，适配推荐模块展示")
+    @Operation(summary = "按关键词推荐商品", description = "根据分类关键词随机返回3个在售商品，适配推荐模块展示")
     public Result<Map<String, Object>> recommendByKeyword(@RequestBody Map<String, String> request) {
         try {
-            String keyword = request.get("keyword");
+            // 适配前端传递的参数名：keyword
+            String query = request.get("keyword");
             // 参数校验
-            if (keyword == null || keyword.trim().isEmpty()) {
-                return Result.error("关键词不能为空");
+            if (query == null || query.trim().isEmpty()) {
+                return Result.error("查询内容不能为空");
+            }
+            String cleanQuery = query.trim();
+
+            // 执行RAG搜索
+            List<GoodsVO> goodsList = goodsService.ragSearch(cleanQuery);
+
+            // 随机筛选3个商品
+            List<GoodsVO> randomGoodsList = new ArrayList<>();
+            if (!goodsList.isEmpty()) {
+                // 打乱列表顺序
+                Collections.shuffle(goodsList);
+                // 截取前3个
+                randomGoodsList = goodsList.subList(0, Math.min(3, goodsList.size()));
             }
 
-            // 构建查询条件
-            GoodsQueryDTO queryDTO = new GoodsQueryDTO();
-            queryDTO.setGoodsStatus(GoodsStatusEnum.ON_SALE.getCode()); // 仅在售
-            queryDTO.setGoodsName(keyword); // 按关键词模糊查询
-            queryDTO.setPageNum(1);
-            queryDTO.setPageSize(3); // 只取前3个
-
-            // 查询商品
-            PageBean<GoodsVO> pb = goodsService.list(queryDTO);
-            List<GoodsVO> goodsList = pb.getItems() != null ? pb.getItems() : new ArrayList<>();
+            // 生成搜索总结（前端可忽略，保留兼容）
+            String summary;
+            if (randomGoodsList.isEmpty()) {
+                summary = String.format("未找到与「%s」相关的在售商品", cleanQuery);
+            } else {
+                summary = qwenChatUtil.generateSearchSummary(cleanQuery, randomGoodsList);
+            }
 
             // 构造返回结果
             Map<String, Object> result = new HashMap<>();
-            result.put("goodsList", goodsList);
-            result.put("total", goodsList.size());
+            result.put("summary", summary);
+            result.put("goodsList", randomGoodsList); // 返回GoodsVO列表
+            result.put("total", randomGoodsList.size());
 
             return Result.success(result);
         } catch (Exception e) {
@@ -292,37 +305,4 @@ public class GoodsController {
             return Result.error("推荐商品查询失败：" + e.getMessage());
         }
     }
-
-    /**
-     * 首页猜你喜欢商品推荐
-     * 获取随机/热门的在售商品
-     */
-    @PostMapping("/recommend/guessLike")
-    @Operation(summary = "猜你喜欢商品推荐", description = "获取首页猜你喜欢的在售商品列表")
-    public Result<PageBean<GoodsVO>> guessLike(@RequestBody(required = false) GoodsQueryDTO queryDTO) {
-        try {
-            if (queryDTO == null) {
-                queryDTO = new GoodsQueryDTO();
-            }
-            // 强制设置仅查询在售商品
-            queryDTO.setGoodsStatus(GoodsStatusEnum.ON_SALE.getCode());
-            // 默认分页参数
-            if (queryDTO.getPageNum() == null) {
-                queryDTO.setPageNum(1);
-            }
-            if (queryDTO.getPageSize() == null) {
-                queryDTO.setPageSize(10);
-            }
-
-            PageBean<GoodsVO> pb = goodsService.list(queryDTO);
-            return Result.success(pb);
-        } catch (Exception e) {
-            log.error("猜你喜欢商品推荐失败", e);
-            return Result.error("猜你喜欢商品查询失败：" + e.getMessage());
-        }
-    }
-
-
-
-
 }

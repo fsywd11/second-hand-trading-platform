@@ -26,5 +26,7 @@ public class GoodsVO implements Serializable {
     private LocalDateTime createTime;
     private Integer CollectCount;// 商品收藏数
     private String sellerPic;
+
+    private Integer SellerId;
 }
 

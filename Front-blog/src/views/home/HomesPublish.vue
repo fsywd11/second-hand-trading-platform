@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElLoading } from 'element-plus'
-import { Plus, Close} from '@element-plus/icons-vue' // 新增魔法棒图标
+import { Plus, Close,Edit} from '@element-plus/icons-vue' // 新增魔法棒图标
 import QuillEditor from '@/components/QuillEditor.vue'
 import { goodsAddService } from '@/api/goods.js'
 import {
@@ -330,7 +330,7 @@ onMounted(() => {
               />
               <el-button
                   type="primary"
-                  icon="Magic"
+                  :icon="Edit"
                   class="ai-generate-btn"
                   @click="generateGoodsDesc"
                   :loading="aiLoading"

@@ -177,6 +177,14 @@ const routes = [
                     title:'评论管理'
                 },
                 component: ()=>import("@/views/trade/CommentManage.vue")
+            },
+            {
+                path: '/trade/campus/knowledge',
+                name: 'TradeCampusKnowledge',
+                meta:{
+                    title:'校园知识图谱管理'
+                },
+                component: ()=>import("@/views/trade/TradeCampusKnowledge.vue")
             }
         ]
     },

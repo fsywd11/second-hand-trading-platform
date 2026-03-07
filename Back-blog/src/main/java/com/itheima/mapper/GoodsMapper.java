@@ -33,15 +33,19 @@ public interface GoodsMapper {
     void add(Goods goods);
 
     /**
-     * 分页查询商品（支持父/子分类ID自动适配）
-     * @param queryDTO 基础查询条件
-     * @param targetCategoryIds 目标分类ID集合（子分类ID）
-     * @return 商品列表（PageHelper会自动包装为Page）
+     * 分页查询商品（支持分类筛选）
+     * @param queryDTO 查询条件
+     * @param categoryIds 目标分类ID列表（子ID）
+     * @param limit 数量限制
+     * @return 商品列表
      */
     List<GoodsVO> list(
             @Param("queryDTO") GoodsQueryDTO queryDTO,
-            @Param("targetCategoryIds") List<Integer> targetCategoryIds
+            @Param("categoryIds") List<Integer> categoryIds,
+            @Param("limit") Integer limit
     );
+
+
     // 根据ID查询商品
     @Select("SELECT * FROM goods WHERE id = #{id}")
     Goods findById(Integer id);
@@ -64,4 +68,26 @@ public interface GoodsMapper {
      */
     @Select("SELECT id FROM goods")
     List<Long> listAllValidGoodsIds();
+
+    /**
+     * 根据商品ID列表查询商品列表
+     * @param goodsIdList 商品ID列表
+     * @return 商品列表
+     */
+    List<GoodsVO> listByIds(List<Integer> goodsIdList);
+
+    /**
+     * 根据分类ID列表查询商品列表
+     * @param categoryIds 分类ID列表
+     * @return 商品列表
+     */
+    List<GoodsVO> listByCategoryIds(List<Integer> categoryIds, Integer limit);
+
+    /**
+     * 查询所有商品
+     * @param queryDTO 查询条件
+     * @return 商品列表
+     */
+    List<GoodsVO> allList(GoodsQueryDTO queryDTO);
+
 }

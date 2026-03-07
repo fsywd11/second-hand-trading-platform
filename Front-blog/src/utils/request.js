@@ -6,7 +6,7 @@ const baseURL = import.meta.env.VITE_API_BASENET_URL;
 //创建axios实例
 const instance = axios.create({
     baseURL: baseURL,
-    timeout: 5000, // 新增超时配置，避免请求一直挂起
+    timeout: 10000, // 新增超时配置，避免请求一直挂起
 })
 
 import {useTokenStore} from '@/stores/token.js'

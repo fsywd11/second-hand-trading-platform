@@ -48,6 +48,16 @@ export const goodsCleanMilvusService = ()=>{
 }
 
 
+// ====================== 商品推荐相关 API ======================
+
+/**
+ * 按关键词推荐商品（获取前3个在售商品）
+ * @param {string} keyword - 分类关键词
+ * @returns {Promise} 包含商品列表的响应结果
+ */
+export const goodsRecommendByKeywordService = (keyword)=>{
+    return request.post('/goods/recommend/byKeyword', { keyword })
+}
 
 
 // ====================== 商品公开相关 API ======================
@@ -62,3 +72,4 @@ export const goodsOpenListService = (queryData)=>{
 export const goodsOpenDetailSellerService = (id)=>{
     return request.post(`/goods//findSellerByUserId/${id}`)
 }
+

@@ -3,7 +3,7 @@
 <mapper namespace="com.itheima.mapper.GoodsMapper">
     <sql id="Base_Column_List">
         g.id, g.goods_name, g.goods_pic, g.category_id, g.sell_price, g.is_new, g.goods_status, g.stock, g.create_time,
-        u.nickname as seller_nickname, c.category_name as category_name,u.user_pic as seller_pic
+        u.nickname as seller_nickname, c.category_name as category_name,u.user_pic as seller_pic,g.seller_id
     </sql>
 
     <select id="list" resultType="com.itheima.vo.GoodsVO">
@@ -18,13 +18,55 @@
                 AND g.goods_name LIKE CONCAT('%', #{queryDTO.goodsName}, '%')
             </if>
 
-            <!-- 核心：分类ID查询（兼容父/子ID） -->
-            <if test="targetCategoryIds != null and targetCategoryIds.size() > 0">
+            <!-- 核心：分类ID查询 - 统一使用categoryIds参数名 -->
+            <if test="categoryIds != null and categoryIds.size() > 0">
                 AND g.category_id IN
-                <foreach collection="targetCategoryIds" item="id" open="(" separator="," close=")">
+                <foreach collection="categoryIds" item="id" open="(" separator="," close=")">
                     #{id}
                 </foreach>
             </if>
+
+            <!-- 商品状态 -->
+            <if test="queryDTO.goodsStatus != null">
+                AND g.goods_status = #{queryDTO.goodsStatus}
+            </if>
+
+            <!-- 新旧程度 -->
+            <if test="queryDTO.isNew != null">
+                AND g.is_new = #{queryDTO.isNew}
+            </if>
+
+            <!-- 价格区间 -->
+            <if test="queryDTO.minPrice != null">
+                AND g.sell_price >= #{queryDTO.minPrice}
+            </if>
+            <if test="queryDTO.maxPrice != null">
+                AND g.sell_price &lt;= #{queryDTO.maxPrice}
+            </if>
+
+            <!-- 卖家ID -->
+            <if test="queryDTO.sellerId != null">
+                AND g.seller_id = #{queryDTO.sellerId}
+            </if>
+        </where>
+        ORDER BY g.create_time DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
+    </select>
+
+    <select id="allList" resultType="com.itheima.vo.GoodsVO">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM goods g
+        LEFT JOIN user u ON g.seller_id = u.id
+        LEFT JOIN shop_category c ON g.category_id = c.id
+        <where>
+            <!-- 商品名称模糊查询 -->
+            <if test="queryDTO.goodsName != null and queryDTO.goodsName != ''">
+                AND g.goods_name LIKE CONCAT('%', #{queryDTO.goodsName}, '%')
+            </if>
+
 
             <!-- 商品状态 -->
             <if test="queryDTO.goodsStatus != null">
@@ -102,4 +144,33 @@
         GROUP BY
             u.id, u.nickname, u.user_pic
     </select>
+
+    <select id="listByIds" resultType="com.itheima.vo.GoodsVO">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM goods g
+        LEFT JOIN user u ON g.seller_id = u.id
+        LEFT JOIN shop_category c ON g.category_id = c.id
+        WHERE g.id IN
+        <foreach collection="list" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND g.goods_status = 1
+    </select>
+
+    <select id="listByCategoryIds" resultType="com.itheima.vo.GoodsVO">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM goods g
+        LEFT JOIN user u ON g.seller_id = u.id
+        LEFT JOIN shop_category c ON g.category_id = c.id
+        WHERE g.category_id IN
+        <foreach collection="list" item="cid" open="(" separator="," close=")">
+            #{cid}
+        </foreach>
+        AND g.goods_status = 1
+        ORDER BY g.create_time DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

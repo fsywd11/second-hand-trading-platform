@@ -78,7 +78,8 @@ const tradeMenuList = [
     ]
   },
   { index: '/trade/address', icon: 'Crop', label: '地址管理'},
-  { index: '/trade/comment/manage', icon: 'ChatLineRound', label: '评论管理' }
+  { index: '/trade/comment/manage', icon: 'ChatLineRound', label: '评论管理' },
+    { index: '/trade/campus/knowledge', icon: 'Promotion', label: '校园知识图谱管理' },
 ]
 
 // ========== 优化：统一的导航切换方法 ==========

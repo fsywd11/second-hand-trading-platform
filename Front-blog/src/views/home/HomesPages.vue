@@ -3,13 +3,18 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGoodsStore } from '@/stores/goodsStore.js'
 import Footer from "@/components/footer.vue";
+// 引入默认图片
+import defaultPic from '@/assets/【哲风壁纸】我妻善逸-鬼灭之刃.png'
+// 引入推荐商品API
+import { goodsRecommendByKeywordService } from '@/api/goods.js'
+
 const router = useRouter()
 const goodsStore = useGoodsStore()
 
 // 筛选条件
 const queryParams = ref({
   pageNum: 1,
-  pageSize: 10,
+  pageSize: 24,
   categoryId: null, // 分类ID
   minPrice: null,   // 最低价格
   maxPrice: null,   // 最高价格
@@ -36,10 +41,86 @@ const activeTab = computed({
   }
 })
 
+// 推荐模块加载状态
+const moduleLoading = ref(false)
+
+// 推荐模块数据（改为动态获取）
+const moduleData = ref([
+  {
+    title: '衣橱捡漏',
+    subtitle: '时尚美衣低价淘',
+    color: 'yellow',
+    keyword: '服饰', // 新增：关联的搜索关键词
+    items: []
+  },
+  {
+    title: '手机数码',
+    subtitle: '热门装备省心入',
+    color: 'blue',
+    keyword: '手机数码', // 新增：关联的搜索关键词
+    items: []
+  },
+  {
+    title: '二次元',
+    subtitle: '烫门新品随手入',
+    color: 'green',
+    keyword: '二次元', // 新增：关联的搜索关键词
+    items: []
+  },
+  {
+    title: '省钱卡券',
+    subtitle: '吃喝玩乐放心购',
+    color: 'pink',
+    keyword: '卡券优惠券', // 新增：关联的搜索关键词
+    items: []
+  }
+])
+
+// 获取推荐模块数据
+const fetchModuleData = async () => {
+  try {
+    moduleLoading.value = true
+    // 遍历每个推荐模块，获取对应关键词的商品
+    for (const module of moduleData.value) {
+      const res = await goodsRecommendByKeywordService(module.keyword)
+      // 核心修复：正确解析后端返回的GoodsVO数据
+      let goodsData = []
+      // 后端返回结构：Result<Map> → res.data.data.goodsList
+      if (res.data && Array.isArray(res.data.goodsList)) {
+        goodsData = res.data.goodsList
+      }
+      // 转换为前端需要的格式（适配GoodsVO字段）
+      module.items = goodsData.map((item, index) => ({
+        id: item.id || `module-${module.color}-${index}`,
+        // 取第一张图片，适配GoodsVO的imageList字段，无数据时用默认图
+        image: item.goodsPic
+            ? item.goodsPic
+            : defaultPic,
+        // 价格取sellPrice，确保是数字类型
+        price: item.sellPrice || 0
+      }))
+    }
+  } catch (error) {
+    console.error('获取推荐商品失败:', error)
+    // 异常时使用默认数据，保证页面正常显示
+    moduleData.value.forEach(module => {
+      module.items = [
+        { id: 1, image: "", price: Math.floor(Math.random() * 100 + 10) },
+        { id: 2, image: "", price: Math.floor(Math.random() * 100 + 10) },
+        { id: 3, image: "", price: Math.floor(Math.random() * 200 + 50) }
+      ]
+    })
+  } finally {
+    moduleLoading.value = false
+  }
+}
+
 // 初始化加载
 onMounted(async () => {
   await goodsStore.fetchCategories()
   await fetchGoods()
+  // 加载推荐模块数据
+  await fetchModuleData()
 })
 
 // 查询商品
@@ -178,50 +259,6 @@ const staticCategories = ref([
     ]
   }
 ])
-
-// 推荐模块数据（与图片一致）
-const moduleData = ref([
-  {
-    title: '衣橱捡漏',
-    subtitle: '时尚美衣低价淘',
-    color: 'yellow',
-    items: [
-      { id: 1, image: 'https://via.placeholder.com/120', price: 36 },
-      { id: 2, image: 'https://via.placeholder.com/120', price: 20 },
-      { id: 3, image: 'https://via.placeholder.com/120', price: 129 }
-    ]
-  },
-  {
-    title: '手机数码',
-    subtitle: '热门装备省心入',
-    color: 'blue',
-    items: [
-      { id: 1, image: 'https://via.placeholder.com/120', price: 225 },
-      { id: 2, image: 'https://via.placeholder.com/120', price: 78 },
-      { id: 3, image: 'https://via.placeholder.com/120', price: 280 }
-    ]
-  },
-  {
-    title: '二次元',
-    subtitle: '烫门新品随手入',
-    color: 'green',
-    items: [
-      { id: 1, image: 'https://via.placeholder.com/120', price: 90 },
-      { id: 2, image: 'https://via.placeholder.com/120', price: 30 },
-      { id: 3, image: 'https://via.placeholder.com/120', price: 18 }
-    ]
-  },
-  {
-    title: '省钱卡券',
-    subtitle: '吃喝玩乐放心购',
-    color: 'pink',
-    items: [
-      { id: 1, image: 'https://via.placeholder.com/120', price: 12 },
-      { id: 2, image: 'https://via.placeholder.com/120', price: 1.5 },
-      { id: 3, image: 'https://via.placeholder.com/120', price: 28 }
-    ]
-  }
-])
 </script>
 
 <template>
@@ -269,7 +306,7 @@ const moduleData = ref([
                 <div class="banner-character">
 
                 </div>
-                <el-button type="primary" size="small" class="banner-button">去看看 ></el-button>
+                <el-button type="primary" size="small" class="banner-button" @click="handleCategoryItemClick('超绝性价比')">去看看 ></el-button>
               </div>
             </div>
           </div>
@@ -294,9 +331,22 @@ const moduleData = ref([
                   <span class="icon" v-else-if="module.color === 'pink'">👝</span>
                 </div>
               </div>
-              <div class="module-items">
-                <div class="module-item" v-for="item in module.items" :key="item.id">
-                  <img :src="item.image" :alt="`商品${item.id}`" />
+              <!-- 推荐模块加载状态 -->
+              <div v-if="moduleLoading" class="module-items skeleton-items">
+                <div class="skeleton-item" v-for="i in 3" :key="i">
+                  <div class="skeleton-img"></div>
+                  <div class="skeleton-price"></div>
+                </div>
+              </div>
+              <!-- 推荐模块商品列表 -->
+              <div v-else class="module-items">
+                <div class="module-item" v-for="item in module.items" :key="item.id" @click="goToDetail(item.id)">
+                  <!-- 核心修改：设置图片默认值，无数据时显示导入的默认图 -->
+                  <img
+                      :src="item.image || defaultPic"
+                      :alt="`商品${item.id}`"
+                      class="module-item-img"
+                  />
                   <span class="price">¥{{ formatPrice(item.price) }}</span>
                 </div>
               </div>
@@ -359,7 +409,7 @@ const moduleData = ref([
                 @click="goToDetail(goods.id)"
             >
               <div class="goods-image-wrapper">
-                <img :src="goods.goodsPic" :alt="goods.goodsName" class="goods-image" />
+                <img :src="goods.goodsPic || defaultPic" :alt="goods.goodsName" class="goods-image" />
                 <div class="goods-tag" v-if="goods.isNew === 1">新品</div>
               </div>
 
@@ -495,7 +545,6 @@ const moduleData = ref([
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  /* 核心修改：固定高度 */
   height: 368px;
   box-sizing: border-box;
   align-items: stretch;
@@ -507,13 +556,11 @@ const moduleData = ref([
   background-color: #f6f6f6;
   border-radius: 12px;
   padding: 0;
-  /* 适配固定高度 */
   height: 100%;
   overflow-y: auto;
 
   .category-menu {
     list-style: none;
-
     margin: 0;
     height: 100%;
     box-sizing: border-box;
@@ -693,18 +740,19 @@ const moduleData = ref([
   }
 }
 
-/* 推荐模块区 */
+/* 推荐模块区 - 核心修改：隐藏横向滚动条，优化内部溢出视觉效果 */
 .module-section {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, 1fr);
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   height: 100%;
+  overflow: hidden;
 
   .module-card {
     border-radius: 12px;
-    padding: 12px;
+    padding: 5px;
     color: #333;
     transition: all 0.3s ease;
     display: flex;
@@ -719,80 +767,114 @@ const moduleData = ref([
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
 
       .module-title-wrapper {
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 1px;
 
         .module-title {
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 700;
           margin: 0;
           display: flex;
           align-items: center;
 
           .arrow {
-            font-size: 10px;
-            margin-left: 4px;
+            font-size: 9px;
+            margin-left: 3px;
             color: #999;
           }
         }
 
         .module-subtitle {
-          font-size: 11px;
+          font-size: 10px;
           color: #666;
         }
       }
 
       .module-icon {
-        width: 40px;
-        height: 40px;
+        width: 32px;
+        height: 32px;
         background-color: #fff;
-        border-radius: 12px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 22px;
+        font-size: 18px;
       }
     }
 
     .module-items {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       overflow-x: auto;
-      padding-bottom: 4px;
+      padding-bottom: 2px;
       flex: 1;
+      /* 核心修改1：隐藏所有浏览器的横向滚动条，保留滚动功能 */
       &::-webkit-scrollbar {
-        height: 3px;
+        display: none;
       }
-      &::-webkit-scrollbar-thumb {
-        background-color: rgba(0, 0, 0, 0.1);
-        border-radius: 2px;
-      }
+      -ms-overflow-style: none;
+      scrollbar-width: none;
 
       .module-item {
         flex-shrink: 0;
-        width: 80px;
+        width: 70px;
         text-align: center;
         transition: all 0.2s ease;
         &:hover {
           transform: scale(1.05);
+          cursor: pointer;
         }
 
-        img {
-          width: 80px;
-          height: 80px;
+        /* 核心修改2：默认图片样式适配，保证和原图片尺寸一致 */
+        .module-item-img {
+          width: 70px;
+          height: 70px;
           object-fit: cover;
-          border-radius: 8px;
-          margin-bottom: 4px;
+          border-radius: 6px;
+          margin-bottom: 2px;
         }
 
         .price {
-          font-size: 12px;
+          font-size: 11px;
           color: #ff4d4f;
           font-weight: bold;
+        }
+      }
+    }
+
+    /* 推荐模块骨架屏样式 */
+    .skeleton-items {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+
+      .skeleton-item {
+        flex-shrink: 0;
+        width: 70px;
+        text-align: center;
+
+        .skeleton-img {
+          width: 70px;
+          height: 70px;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s infinite;
+          border-radius: 6px;
+          margin-bottom: 2px;
+        }
+
+        .skeleton-price {
+          width: 40px;
+          height: 12px;
+          margin: 0 auto;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s infinite;
+          border-radius: 4px;
         }
       }
     }
@@ -1082,7 +1164,7 @@ const moduleData = ref([
     flex-direction: column;
     gap: 16px;
     padding: 12px;
-    height: auto; /* 移动端恢复自适应高度 */
+    height: auto;
     min-height: 368px;
   }
 
@@ -1139,7 +1221,6 @@ const moduleData = ref([
         }
       }
 
-      /* 响应式骨架屏调整 */
       .skeleton-image {
         height: 140px;
       }

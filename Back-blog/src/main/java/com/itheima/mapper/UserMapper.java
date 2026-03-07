@@ -14,7 +14,7 @@ public interface UserMapper {
     @Insert("insert into user (username,password,create_time,update_time )" + " values(#{username},#{md5String},now(),now())")
     void add(String username,String md5String);
     //更新用户信息
-    @Update("update user set nickname = #{nickname},email = #{email},phone = #{phone},update_time = now() where id = #{id}")
+    @Update("update user set nickname = #{nickname},email = #{email},phone = #{phone},major = #{major},grade = #{grade},campus_scene = #{campusScene},update_time = now() where id = #{id}")
     void update(User user);
     //更新用户头像
     @Update("update user set user_pic = #{avatarUrl},update_time = now() where id = #{id}")

@@ -5,14 +5,17 @@ import { userUpdateInfoServices } from '@/api/user.js'
 import { ElMessage } from "element-plus";
 
 const userInfoStore = useUserInfoStore();
-// 浅拷贝当前 store 信息（确保包含 phone 字段）
+// 浅拷贝当前 store 信息，新增三个字段的兜底处理
 const userInfo = ref({
   ...userInfoStore.info,
-  // 兜底处理：如果原有数据没有phone字段，初始化为空字符串
-  phone: userInfoStore.info.phone || ''
+  phone: userInfoStore.info.phone || '',
+  // ========== 新增字段 ==========
+  major: userInfoStore.info.major || '',       // 专业
+  grade: userInfoStore.info.grade || '',       // 年级
+  campusScene: userInfoStore.info.campusScene || '' // 校园场景
 })
 
-// 新增手机号验证规则
+// 新增手机号验证规则，同时添加新增字段的校验规则
 const rules = {
   nickname: [
     { required: true, message: '请输入用户昵称', trigger: 'blur' },
@@ -26,6 +29,19 @@ const rules = {
     { required: true, message: '请输入手机号码', trigger: 'blur' },
     // 中国大陆手机号正则（支持13/14/15/16/17/18/19开头）
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的11位手机号码', trigger: 'blur' }
+  ],
+  // ========== 新增字段校验规则 ==========
+  major: [
+    { required: true, message: '请输入专业', trigger: 'blur' },
+    { pattern: /^\S{2,20}$/, message: '专业必须是2-20位的非空字符串', trigger: 'blur' }
+  ],
+  grade: [
+    { required: true, message: '请输入年级', trigger: 'blur' },
+    { pattern: /^\S{2,10}$/, message: '年级必须是2-10位的非空字符串', trigger: 'blur' }
+  ],
+  campusScene: [
+    { required: true, message: '请输入校园场景', trigger: 'blur' },
+    { pattern: /^\S{2,50}$/, message: '校园场景必须是2-50位的非空字符串', trigger: 'blur' }
   ]
 }
 
@@ -46,12 +62,16 @@ const updateUserInfoStore = async () => {
     let result = await userUpdateInfoServices(userInfo.value)
     ElMessage.success(result.data ? result.data : '修改成功')
 
-    // 合并数据，保留原有的 userPic 等其他字段，新增 phone 字段
+    // 合并数据，保留原有的 userPic 等其他字段，新增所有字段
     const updatedInfo = {
       ...userInfoStore.info,
       nickname: userInfo.value.nickname,
       email: userInfo.value.email,
-      phone: userInfo.value.phone // 新增手机号更新
+      phone: userInfo.value.phone,
+      // ========== 新增字段 ==========
+      major: userInfo.value.major,
+      grade: userInfo.value.grade,
+      campusScene: userInfo.value.campusScene
     }
 
     // 更新 Pinia 状态
@@ -94,7 +114,32 @@ const updateUserInfoStore = async () => {
                 v-model="userInfo.phone"
                 placeholder="请输入11位手机号码"
                 maxlength="11"
-            show-word-limit
+                show-word-limit
+            ></el-input>
+          </el-form-item>
+          <!-- ========== 新增字段表单项 ========== -->
+          <el-form-item label="专业" prop="major">
+            <el-input
+                v-model="userInfo.major"
+                placeholder="请输入您的专业"
+                maxlength="20"
+                show-word-limit
+            ></el-input>
+          </el-form-item>
+          <el-form-item label="年级" prop="grade">
+            <el-input
+                v-model="userInfo.grade"
+                placeholder="请输入您的年级（如：2023级）"
+                maxlength="10"
+                show-word-limit
+            ></el-input>
+          </el-form-item>
+          <el-form-item label="校园场景" prop="campusScene">
+            <el-input
+                v-model="userInfo.campusScene"
+                placeholder="请输入校园场景（如：图书馆/教学楼/食堂）"
+                maxlength="50"
+                show-word-limit
             ></el-input>
           </el-form-item>
           <el-form-item>
@@ -108,7 +153,7 @@ const updateUserInfoStore = async () => {
 
 <style scoped>
 .page-container { border: none; box-shadow: none; }
-/* 可选：优化手机号输入框样式 */
+/* 可选：优化输入框样式 */
 :deep(.el-input__inner) {
   padding: 0 15px;
 }

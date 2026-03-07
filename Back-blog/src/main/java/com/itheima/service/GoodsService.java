@@ -34,4 +34,5 @@ public interface GoodsService {
      * 全量校验并清理Milvus脏数据
      */
     void cleanMilvusDirtyData();
+
 }

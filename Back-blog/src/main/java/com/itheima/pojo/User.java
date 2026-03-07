@@ -37,4 +37,10 @@ public class User {
     private LocalDateTime updateTime;//更新时间
     private String roleId;//角色ID
     private String phone;
+
+    // ========== 新增字段 ==========
+    private String major;       // 专业
+    private String grade;       // 年级
+    private String campusScene; // 校园场景
+    private String tags;        // 用户标签
 }
