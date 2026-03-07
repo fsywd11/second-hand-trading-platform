@@ -72,3 +72,10 @@ export const applyRefundService = (refundApplyDTO) => {
 export const handleRefundService = (refundHandleDTO) => {
     return request.put(`/order/refund/handle`, refundHandleDTO);
 }
+
+/**
+删除订单
+*/
+export const deleteOrderService = (id) => {
+    return request.delete(`/order/delete/${id}`);
+}

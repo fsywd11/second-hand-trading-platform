@@ -5,7 +5,7 @@
 <mapper namespace="com.itheima.mapper.RolesMapper"><!--映射路径文件-->
     <!--动态sql分页查询，查询频繁，故而以xml配置-->
     <!--xml映射文件包名要与mapper一样-->
-    <cache eviction="LRU" flushInterval="60000" size="1024" readOnly="true"/>
+<!--    <cache eviction="LRU" flushInterval="60000" size="1024" readOnly="true"/>-->
     <select id="list" resultType="com.itheima.pojo.Roles">
         select * from roles
         <where>

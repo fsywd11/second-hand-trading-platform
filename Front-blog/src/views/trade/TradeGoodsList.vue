@@ -1,16 +1,21 @@
 <script setup lang="js">
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Edit, Delete, Search, Refresh, Plus } from '@element-plus/icons-vue'
+// 修复：使用最基础的 Tools 图标（所有版本都存在）
+import { Edit, Delete, Search, Refresh, Tools } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // 导入商品相关API
 import {
   goodsListService,
   goodsDeleteService,
-  goodsUpdateStatusService
+  goodsUpdateStatusService,
+  goodsCleanMilvusService // 导入清理Milvus脏数据API
 } from '@/api/goods.js'
-// 导入商品分类API
-import { shopCategoryListService } from '@/api/shopcategory.js'
+// ========== 核心修改：替换分类API ==========
+import {
+  shopCategoryTreeListService,
+  shopCategoryChildListService
+} from '@/api/shopcategory.js'
 
 // 初始化路由
 const router = useRouter()
@@ -23,14 +28,16 @@ const pageSize = ref(10)
 const total = ref(0)
 // 商品列表数据
 const goodsList = ref([])
-// 分类列表
-const categoryList = ref([])
+// ========== 核心修改：分类数据结构调整 ==========
+const parentCategoryList = ref([]) // 一级分类列表
+const childCategoryList = ref([])  // 二级分类列表（根据选中的一级分类动态加载）
 // 选中的商品ID（批量操作）
 const selectedGoodsIds = ref([])
 // 查询条件（匹配GoodsQueryDTO）
 const queryForm = ref({
   goodsName: '',        // 商品名称模糊查询
-  categoryId: '',       // 分类ID
+  parentCategoryId: '', // 新增：一级分类ID
+  categoryId: '',       // 保留：二级分类ID
   goodsStatus: '',      // 商品状态（1-在售 2-已售出 3-下架 4-审核中 5-违规封禁）
   isNew: '',            // 新旧程度
   minPrice: '',         // 最低价格
@@ -39,17 +46,42 @@ const queryForm = ref({
 })
 
 // ========== 方法定义 ==========
-// 获取商品分类列表
-const getCategoryList = async () => {
+// ========== 核心修改：重构分类获取逻辑 ==========
+// 获取一级分类列表
+const getParentCategoryList = async () => {
   try {
-    const res = await shopCategoryListService()
+    const res = await shopCategoryTreeListService()
     if (res.code === 0) {
-      categoryList.value = res.data
+      // 初始化一级分类列表
+      parentCategoryList.value = res.data.map(item => ({
+        id: item.id,
+        categoryName: item.categoryName
+      }))
     } else {
-      ElMessage.error('获取分类列表失败：' + res.message)
+      ElMessage.error('获取一级分类列表失败：' + res.message)
     }
   } catch (error) {
-    ElMessage.error('获取分类列表异常：' + error.message)
+    ElMessage.error('获取一级分类列表异常：' + error.message)
+  }
+}
+
+// 根据选中的一级分类加载二级分类
+const getChildCategoryList = async (parentId) => {
+  if (!parentId) {
+    childCategoryList.value = []
+    queryForm.value.categoryId = '' // 清空二级分类选择
+    return
+  }
+  try {
+    const res = await shopCategoryChildListService(parentId)
+    if (res.code === 0) {
+      childCategoryList.value = res.data
+      queryForm.value.categoryId = '' // 切换一级分类时清空二级分类
+    } else {
+      ElMessage.error('获取二级分类列表失败：' + res.message)
+    }
+  } catch (error) {
+    ElMessage.error('获取二级分类列表异常：' + error.message)
   }
 }
 
@@ -60,7 +92,14 @@ const getGoodsList = async () => {
     const queryData = {
       pageNum: pageNum.value,
       pageSize: pageSize.value,
-      ...queryForm.value
+      // 核心：仅传递二级分类ID给后端，保持接口兼容
+      categoryId: queryForm.value.categoryId,
+      goodsName: queryForm.value.goodsName,
+      goodsStatus: queryForm.value.goodsStatus,
+      isNew: queryForm.value.isNew,
+      minPrice: queryForm.value.minPrice,
+      maxPrice: queryForm.value.maxPrice,
+      sellerId: queryForm.value.sellerId
     }
     const res = await goodsListService(queryData)
     if (res.code === 0) {
@@ -72,6 +111,38 @@ const getGoodsList = async () => {
     }
   } catch (error) {
     ElMessage.error('获取商品列表异常：' + error.message)
+  }
+}
+
+// ========== 新增：清理Milvus脏数据方法 ==========
+const cleanMilvusDirtyData = async () => {
+  try {
+    // 二次确认防止误操作
+    await ElMessageBox.confirm(
+        '确认要清理Milvus脏数据吗？该操作不可逆，请谨慎执行！',
+        '清理Milvus脏数据',
+        {
+          confirmButtonText: '确认清理',
+          cancelButtonText: '取消',
+          type: 'warning',
+          draggable: true
+        }
+    )
+
+    // 调用清理接口
+    const res = await goodsCleanMilvusService()
+    if (res.code === 0) {
+      ElMessage.success('Milvus脏数据清理成功！')
+      // 清理完成后刷新商品列表
+      await getGoodsList()
+    } else {
+      ElMessage.error('Milvus脏数据清理失败：' + res.message)
+    }
+  } catch (error) {
+    // 如果是用户取消操作，不提示错误
+    if (error !== 'cancel') {
+      ElMessage.error('Milvus脏数据清理异常：' + (error.message || '操作取消'))
+    }
   }
 }
 
@@ -91,7 +162,8 @@ const onCurrentChange = (num) => {
 const resetSearchCondition = () => {
   queryForm.value = {
     goodsName: '',
-    categoryId: '',
+    parentCategoryId: '', // 重置一级分类
+    categoryId: '',       // 重置二级分类
     goodsStatus: '',
     isNew: '',
     minPrice: '',
@@ -99,6 +171,8 @@ const resetSearchCondition = () => {
     sellerId: ''
   }
   pageNum.value = 1
+  // 清空二级分类列表
+  childCategoryList.value = []
   getGoodsList()
 }
 
@@ -178,6 +252,15 @@ const handleStatusChange = async (row) => {
   }
 }
 
+// ========== 核心修改：监听一级分类变化 ==========
+watch(
+    () => queryForm.value.parentCategoryId,
+    async (newVal) => {
+      await getChildCategoryList(newVal)
+    },
+    { immediate: false }
+)
+
 // 监听路由变化（编辑/新增返回后刷新列表）
 watch(
     () => route.fullPath,
@@ -190,7 +273,7 @@ watch(
 
 // 初始化加载
 onMounted(async () => {
-  await getCategoryList()
+  await getParentCategoryList() // 修改：加载一级分类
   await getGoodsList()
 })
 </script>
@@ -215,16 +298,34 @@ onMounted(async () => {
           ></el-input>
         </el-form-item>
 
-        <el-form-item label="商品分类">
+        <!-- ========== 核心修改：分类筛选区域 ========== -->
+        <el-form-item label="一级分类">
+          <el-select
+              v-model="queryForm.parentCategoryId"
+              placeholder="选择一级分类"
+              clearable
+              style="width: 180px"
+          >
+            <el-option
+                v-for="c in parentCategoryList"
+                :key="c.id"
+                :label="c.categoryName"
+                :value="c.id"
+            ></el-option>
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="二级分类">
           <el-select
               v-model="queryForm.categoryId"
-              placeholder="选择分类"
+              placeholder="选择二级分类"
               clearable
               style="width: 180px"
               @change="getGoodsList"
+              :disabled="!queryForm.parentCategoryId"
           >
             <el-option
-                v-for="c in categoryList"
+                v-for="c in childCategoryList"
                 :key="c.id"
                 :label="c.categoryName"
                 :value="c.id"
@@ -276,6 +377,15 @@ onMounted(async () => {
               :disabled="selectedGoodsIds.length === 0"
           >
             批量删除 ({{ selectedGoodsIds.length }})
+          </el-button>
+          <!-- ========== 最终修复：使用 Tools 图标 ========== -->
+          <el-button
+              type="warning"
+              :icon="Tools"
+              @click="cleanMilvusDirtyData"
+              style="margin-left: 10px"
+          >
+            清理Milvus脏数据
           </el-button>
         </el-form-item>
       </el-form>
@@ -418,6 +528,7 @@ onMounted(async () => {
     margin: 0 8px;
     color: #c0c4cc;
   }
+
 }
 
 .table-wrapper {

@@ -32,9 +32,16 @@ public interface GoodsMapper {
     @Options(useGeneratedKeys = true, keyProperty = "id")
     void add(Goods goods);
 
-    // 分页查询商品
-    List<GoodsVO> list(GoodsQueryDTO queryDTO);
-
+    /**
+     * 分页查询商品（支持父/子分类ID自动适配）
+     * @param queryDTO 基础查询条件
+     * @param targetCategoryIds 目标分类ID集合（子分类ID）
+     * @return 商品列表（PageHelper会自动包装为Page）
+     */
+    List<GoodsVO> list(
+            @Param("queryDTO") GoodsQueryDTO queryDTO,
+            @Param("targetCategoryIds") List<Integer> targetCategoryIds
+    );
     // 根据ID查询商品
     @Select("SELECT * FROM goods WHERE id = #{id}")
     Goods findById(Integer id);
@@ -49,9 +56,12 @@ public interface GoodsMapper {
     // 更新商品状态
     void updateStatus(@Param("id") Integer id, @Param("status") Integer status, @Param("updateTime") LocalDateTime updateTime);
 
-    // 删除商品标签关联
-    @Delete("DELETE FROM goods_tag WHERE goods_id = #{goodsId}")
-    void deleteGoodsTagsByGoodsId(Integer goodsId);
 
     BuyerViewSellerVO findSellerByUserId(Integer id);
+
+    /**
+     * 查询数据库中所有未删除的商品ID
+     */
+    @Select("SELECT id FROM goods")
+    List<Long> listAllValidGoodsIds();
 }

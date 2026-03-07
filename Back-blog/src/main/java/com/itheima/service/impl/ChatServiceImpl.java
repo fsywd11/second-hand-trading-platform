@@ -47,7 +47,6 @@ public class ChatServiceImpl implements ChatService {
      * 获取会话历史消息（分页+标记已读）
      */
     @Override
-    @Transactional(readOnly = true)
     public PageBean<ChatMessage> getSessionMsg(Long sessionId, Integer pageNum, Integer pageSize, Integer userId) {
         PageBean<ChatMessage> pb = new PageBean<>();
         // 先标记该会话消息为已读
@@ -57,7 +56,7 @@ public class ChatServiceImpl implements ChatService {
         // 分页查询消息
         PageHelper.startPage(pageNum, pageSize);
         int offset = (pageNum - 1) * pageSize;
-        List<ChatMessage> msgList = messageMapper.selectMsgBySession(sessionId, offset, pageSize);
+        List<ChatMessage> msgList = messageMapper.selectMsgBySession(sessionId);
         Page<ChatMessage> page = (Page<ChatMessage>) msgList;
 
         pb.setTotal(page.getTotal());

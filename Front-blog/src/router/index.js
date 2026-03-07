@@ -260,6 +260,15 @@ const routes = [
                 },
                 component: ()=>import("@/views/home/HomesMySold.vue")
             },
+            //编辑商品
+            {
+                path: '/homes/goodsEdit',
+                name: 'HomesEdit',
+                meta:{
+                    title:'编辑商品'
+                },
+                component: ()=>import("@/views/home/HomesGoodsEdit.vue")
+            },
         ]
     },
     // ========== 原有前台路由（无修改） ==========
@@ -322,15 +331,6 @@ const routes = [
                 },
                 component: ()=>import("@/views/home/HomesPublish.vue")
             },
-            //编辑商品
-            {
-                path: '/homes/goodsEdit',
-                name: 'HomesEdit',
-                meta:{
-                    title:'编辑商品'
-                },
-                component: ()=>import("@/views/home/HomesGoodsEdit.vue")
-            },
             //通知
             {
                 path: '/homes/notice',
@@ -358,6 +358,24 @@ const routes = [
                 },
                 component: ()=>import("@/views/home/PaymentPage.vue")
             },
+            //AI智能助手
+            {
+                path: '/homes/AIChat',
+                name: 'AIPage',
+                meta:{
+                    title:'AI智能助手'
+                },
+                component: ()=>import("@/views/home/HomesAIChat.vue")
+            },
+            //搜索
+            {
+                path: '/homes/search',
+                name: 'HomesSearch',
+                meta:{
+                    title:'搜索'
+                },
+                component: ()=>import("@/views/home/HomesSearch.vue")
+            }
         ]
     }
 ];

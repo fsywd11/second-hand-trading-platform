@@ -6,6 +6,13 @@
   "description": "",
   "glyphs": [
     {
+      "icon_id": "43418209",
+      "name": "AI-ChatData",
+      "font_class": "AI-ChatData",
+      "unicode": "e61d",
+      "unicode_decimal": 58909
+    },
+    {
       "icon_id": "32521467",
       "name": "像素风_火箭",
       "font_class": "xiangsufeng_huojian",

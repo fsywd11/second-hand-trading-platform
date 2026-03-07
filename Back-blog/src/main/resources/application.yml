@@ -60,6 +60,7 @@ mybatis:
   mapper-locations: classpath:mapper/**/*.xml
   type-aliases-package: com.itheima.entity
 
+
 # 日志优化（解决SLF4J多绑定问题）
 logging:
   level:

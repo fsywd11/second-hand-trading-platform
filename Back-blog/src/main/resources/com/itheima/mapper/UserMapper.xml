@@ -5,7 +5,7 @@
 <mapper namespace="com.itheima.mapper.UserMapper"><!--映射路径文件-->
     <!--动态sql分页查询，查询频繁，故而以xml配置-->
     <!--xml映射文件包名要与mapper一样-->
-    <cache eviction="LRU" flushInterval="60000" size="1024" readOnly="true"/>
+<!--    <cache eviction="LRU" flushInterval="60000" size="1024" readOnly="true"/>-->
     <select id="userList" resultType="com.itheima.pojo.User">
         select * from user
         <where>

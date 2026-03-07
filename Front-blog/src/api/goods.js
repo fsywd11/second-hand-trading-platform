@@ -37,6 +37,17 @@ export const goodsMyListService = (queryData)=>{
 }
 
 
+//通过RAG搜索商品
+export const goodsRagSearchService = (query)=>{
+    return request.post('/goods/rag/search',query)
+}
+
+//清理Milvus脏数据（仅管理员可调用）
+export const goodsCleanMilvusService = ()=>{
+    return request.post('/goods/cleanMilvusDirtyData')
+}
+
+
 
 
 // ====================== 商品公开相关 API ======================

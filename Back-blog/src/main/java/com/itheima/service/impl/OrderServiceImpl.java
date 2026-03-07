@@ -389,4 +389,9 @@ public class OrderServiceImpl implements OrderService {
 
         log.info("订单退款处理完成，订单ID：{}，处理结果：{}", orderId, handleResult == 2 ? "退款成功" : "退款失败");
     }
+
+    @Override
+    public void deleteOrder( Integer id){
+        orderMapper.deleteOrder(id);
+    }
 }

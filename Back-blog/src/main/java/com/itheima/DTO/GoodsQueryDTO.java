@@ -58,4 +58,8 @@ public class GoodsQueryDTO {
      * 卖家ID
      */
     private Integer sellerId;
+
+    /**
+     *
+     */
 }

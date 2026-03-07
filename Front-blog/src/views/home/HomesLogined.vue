@@ -180,7 +180,7 @@ const handleMenuClick = (index) => {
 
 .xianyu-container {
   width: 1500px;
-  margin: 70px auto;
+  margin: 30px auto;
   display: flex;
   gap: 20px;
 }

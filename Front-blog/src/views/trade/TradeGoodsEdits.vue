@@ -5,7 +5,11 @@ import { ElMessage, ElLoading } from 'element-plus'
 import { Plus, Close } from '@element-plus/icons-vue'
 import QuillEditor from '@/components/QuillEditor.vue'
 import { goodsDetailService, goodsUpdateService } from '@/api/goods.js'
-import { shopCategoryListService } from '@/api/shopcategory.js'
+// ========== 核心修改：替换分类API ==========
+import {
+  shopCategoryTreeListService,
+  shopCategoryChildListService
+} from '@/api/shopcategory.js'
 import { useTokenStore } from '@/stores/token.js'
 import { useTagsViewStore } from '@/stores/tagsView.js'
 import useUserInfoStore from '@/stores/userInfo.js'
@@ -16,8 +20,10 @@ const route = useRoute()
 const tokenStore = useTokenStore()
 const tagsViewStore = useTagsViewStore()
 
-// 商品分类列表
-const categorys = ref([])
+// ========== 核心修改：分类数据结构调整 ==========
+const parentCategorys = ref([]) // 一级分类列表
+const childCategorys = ref([])  // 二级分类列表（根据选中的一级分类动态加载）
+const selectedParentId = ref('') // 选中的一级分类ID
 // 封面图文件（单文件）
 const coverFile = ref(null)
 // 封面图URL
@@ -29,6 +35,8 @@ const detailUrlList = ref([])
 
 // 页面加载状态（仅保留页面级加载，移除图片加载）
 const pageLoading = ref(true)
+// 新增：loading实例引用
+const loadingInstance = ref(null)
 
 // 定义新旧程度选项（与后端GoodsIsNewEnum完全一致）
 const newDegreeOptions = ref([
@@ -43,7 +51,8 @@ const newDegreeOptions = ref([
 const goodsModel = ref({
   id: '',
   goodsName: '',
-  categoryId: '',
+  parentCategoryId: '', // 新增：一级分类ID
+  categoryId: '',       // 保留：二级分类ID
   originalPrice: 0,
   sellPrice: 0,
   isNew: 0,
@@ -55,20 +64,49 @@ const goodsModel = ref({
   imageList: []
 })
 
-// 获取商品分类列表
-const getCategoryList = async () => {
+// ========== 核心修改：重构分类获取逻辑 ==========
+// 获取一级分类列表
+const getParentCategoryList = async () => {
   try {
-    const result = await shopCategoryListService()
-    categorys.value = result.data
+    const result = await shopCategoryTreeListService()
+    if (result.code === 0) {
+      parentCategorys.value = result.data.map(item => ({
+        id: item.id,
+        categoryName: item.categoryName
+      }))
+    }
   } catch (error) {
     ElMessage.error('获取商品分类失败')
+  }
+}
+
+// 根据选中的一级分类加载二级分类
+const loadChildCategories = async (parentId) => {
+  if (!parentId) {
+    childCategorys.value = []
+    goodsModel.value.categoryId = '' // 清空二级分类选择
+    return
+  }
+  try {
+    const res = await shopCategoryChildListService(parentId)
+    if (res.code === 0) {
+      childCategorys.value = res.data
+    }
+  } catch (error) {
+    ElMessage.error('获取子分类失败')
   }
 }
 
 // 获取商品详情数据
 const getGoodsDetail = async () => {
   try {
-    pageLoading.value = true
+    // 核心修改：使用Loading服务替代标签式加载
+    loadingInstance.value = ElLoading.service({
+      fullscreen: true,
+      lock: true,
+      text: '正在加载商品信息...'
+    })
+
     const goodsId = route.query.id || JSON.parse(sessionStorage.getItem('editGoods') || '{}').id
     if (!goodsId) {
       ElMessage.warning('商品ID不存在，无法编辑')
@@ -79,17 +117,24 @@ const getGoodsDetail = async () => {
     // 获取商品详情
     const res = await goodsDetailService(goodsId)
     const goodsData = res.data
-    console.log('goodsData', goodsData)
 
     // 基础信息映射
     goodsModel.value = {
       ...goodsData,
+      parentCategoryId: goodsData.parentCategoryId || '', // 回显一级分类ID
       originalPrice: Number(goodsData.originalPrice) || 0,
       sellPrice: Number(goodsData.sellPrice) || 0,
       isNew: Number(goodsData.isNew) || 0,
       goodsStatus: Number(goodsData.goodsStatus) || 1,
       stock: Number(goodsData.stock) || 1,
       sellerId: userInfoStore.info.id || goodsData.sellerId
+    }
+
+    // ========== 核心修改：编辑回显分类逻辑 ==========
+    // 回显一级分类并加载对应的二级分类
+    if (goodsData.parentCategoryId) {
+      selectedParentId.value = goodsData.parentCategoryId
+      await loadChildCategories(goodsData.parentCategoryId)
     }
 
     // 封面图处理
@@ -117,6 +162,11 @@ const getGoodsDetail = async () => {
     await router.push('/trade/goods/list')
   } finally {
     pageLoading.value = false
+    // 核心修改：关闭loading实例
+    if (loadingInstance.value) {
+      loadingInstance.value.close()
+      loadingInstance.value = null
+    }
   }
 }
 
@@ -194,7 +244,8 @@ const uploadError = () => {
 // 提交修改后的商品信息
 const submitGoods = async () => {
   if (!goodsModel.value.goodsName) return ElMessage.warning('商品名称不能为空')
-  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择商品分类')
+  if (!goodsModel.value.parentCategoryId) return ElMessage.warning('请选择一级分类') // 修改
+  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择二级分类') // 修改
   if (goodsModel.value.originalPrice < 0) return ElMessage.warning('原价不能为负数')
   if (!goodsModel.value.sellPrice || goodsModel.value.sellPrice <= 0) return ElMessage.warning('售卖价格必须大于0')
   if (goodsModel.value.isNew === null || goodsModel.value.isNew === undefined) return ElMessage.warning('请选择新旧程度')
@@ -207,6 +258,7 @@ const submitGoods = async () => {
       ...goodsModel.value,
       originalPrice: Number(goodsModel.value.originalPrice),
       sellPrice: Number(goodsModel.value.sellPrice),
+      parentCategoryId: Number(goodsModel.value.parentCategoryId), // 提交一级分类ID
       categoryId: Number(goodsModel.value.categoryId),
       isNew: Number(goodsModel.value.isNew),
       sellerId: Number(goodsModel.value.sellerId),
@@ -218,6 +270,9 @@ const submitGoods = async () => {
     handleClose(router.currentRoute.value.path)
   } catch (error) {
     ElMessage.error('修改失败：' + (error.message || '服务器错误'))
+  } finally {
+    // 关闭提交加载
+    submitLoading.close()
   }
 }
 
@@ -244,8 +299,9 @@ const handleClose = (path) => {
   coverUrl.value = ''
   detailFileList.value = []
   detailUrlList.value = []
+  selectedParentId.value = '' // 重置一级分类选择
   goodsModel.value = {
-    id: '', goodsName: '', categoryId: '', originalPrice: 0, sellPrice: 0,
+    id: '', goodsName: '', parentCategoryId: '', categoryId: '', originalPrice: 0, sellPrice: 0,
     isNew: 0, goodsStatus: 1, goodsDesc: '', goodsPic: '', stock: 1,
     sellerId: userInfoStore.info.id || null,
     imageList: []
@@ -253,9 +309,15 @@ const handleClose = (path) => {
   tagsViewStore.delTagsItem(index)
 }
 
+// ========== 核心修改：监听一级分类变化 ==========
+watch(() => selectedParentId.value, async (newVal) => {
+  goodsModel.value.parentCategoryId = newVal
+  await loadChildCategories(newVal)
+}, { immediate: false })
+
 // 初始化页面数据
 onMounted(async () => {
-  await getCategoryList()
+  await getParentCategoryList() // 修改：加载一级分类
   await getGoodsDetail()
   pageLoading.value = false
 })
@@ -270,9 +332,9 @@ watch(() => route.query.id, async (newId) => {
 
 <template>
   <div class="goods-edit-container">
-    <!-- 页面加载中 -->
+    <!-- 核心修改：移除标签式el-loading，改用服务式加载 -->
     <div v-if="pageLoading" class="page-loading">
-      <el-loading fullscreen lock text="正在加载商品信息..."></el-loading>
+      <!-- 此处不再需要el-loading标签，加载状态由ElLoading.service控制 -->
     </div>
 
     <div v-else class="main-wrapper">
@@ -363,6 +425,7 @@ watch(() => route.query.id, async (newId) => {
                       accept="image/*"
                       class="cover-file-input"
                       @change="handleCoverChange($event.target.files[0])"
+                      ref="coverInput"
                   >
                   <el-icon
                       v-if="coverUrl"
@@ -399,17 +462,45 @@ watch(() => route.query.id, async (newId) => {
             </div>
           </div>
 
+          <!-- ========== 核心修改：分类选择区域 ========== -->
           <div class="form-block">
             <div class="block-title">所属商品类别</div>
-            <div class="category-tags-container">
-              <div
-                  v-for="c in categorys"
-                  :key="c.id"
-                  class="tag-item"
-                  :class="{ 'active': goodsModel.categoryId === c.id }"
-                  @click="goodsModel.categoryId = c.id"
-              >
-                {{ c.categoryName }}
+            <div class="category-select-container">
+              <!-- 一级分类选择 -->
+              <div class="category-level-wrapper">
+                <div class="level-title">一级分类</div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in parentCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': selectedParentId === c.id }"
+                      @click="selectedParentId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 二级分类选择（有数据时显示） -->
+              <div class="category-level-wrapper" v-if="childCategorys.length > 0">
+                <div class="level-title">二级分类 <span class="required-tag">*</span></div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in childCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': goodsModel.categoryId === c.id }"
+                      @click="goodsModel.categoryId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 无二级分类提示 -->
+              <div class="no-child-tips" v-if="selectedParentId && childCategorys.length === 0">
+                该分类下暂无二级分类，请选择其他一级分类
               </div>
             </div>
           </div>
@@ -731,7 +822,34 @@ watch(() => route.query.id, async (newId) => {
   font-size: 24px;
 }
 
-/* 分类标签容器 */
+/* ========== 核心修改：分类选择样式 ========== */
+.category-select-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.category-level-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.level-title {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+
+  .required-tag {
+    color: #f56c6c;
+    margin-left: 4px;
+  }
+}
+
 .category-tags-container {
   display: flex;
   gap: 8px;
@@ -748,12 +866,25 @@ watch(() => route.query.id, async (newId) => {
   color: #666;
   cursor: pointer;
   flex-shrink: 0;
+  transition: all 0.2s ease;
 
   &.active {
     background-color: #409eff;
     color: #fff;
     border-color: #409eff;
   }
+
+  &:hover:not(.active) {
+    border-color: #409eff;
+    color: #409eff;
+  }
+}
+
+.no-child-tips {
+  font-size: 12px;
+  color: #909399;
+  padding: 8px 0;
+  box-sizing: border-box;
 }
 
 /* 库存输入 */

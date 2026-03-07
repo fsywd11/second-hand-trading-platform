@@ -54,14 +54,14 @@ body {
 
 /* 滚动条滑块 */
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(60deg, rgb(228, 165, 222) 0%, rgb(190, 95, 213) 100%);
+  background-color: #8b8b8b;
   border-radius: 4px;
   transition: background 0.3s ease;
 }
 
 /* 滚动条滑块悬停状态 */
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(60deg, rgb(228, 165, 222) 0%, rgb(190, 95, 213) 100%);
+  background-color: #8b8b8b;
 }
 
 /* 滚动条两端的按钮（上下箭头） */

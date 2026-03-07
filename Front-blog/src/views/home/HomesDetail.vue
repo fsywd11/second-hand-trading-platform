@@ -219,10 +219,6 @@ async function getSellerInfo(sellerId) {
   }
 }
 
-// 切换主图
-const switchImage = (index) => {
-  currentImageIndex.value = index;
-};
 
 // 真实的收藏/取消收藏逻辑
 const toggleCollect = async () => {
@@ -306,10 +302,29 @@ const handleBuyNow = () => {
     query: { goodsId: goodsId.value }
   });
 }
+
+// 在formatOriginalPrice计算属性后新增
+// 处理图片预览列表（转为纯URL数组）
+const previewImageList = computed(() => {
+  // 优先使用多图列表，提取imageUrl字段
+  if (goodsDetail.value.imageList && goodsDetail.value.imageList.length) {
+    return goodsDetail.value.imageList.map(item => item.imageUrl).filter(Boolean);
+  }
+  // 备用：使用主图
+  return goodsDetail.value.goodsPic ? [goodsDetail.value.goodsPic] : [];
+});
+
+// 修复switchImage方法的边界处理
+const switchImage = (index) => {
+  const listLength = goodsDetail.value.imageList?.length || 1;
+  if (listLength === 0) return;
+  // 确保索引在有效范围内
+  currentImageIndex.value = (index + listLength) % listLength;
+};
 </script>
 
 <template>
-  <div class="goods-detail-container no-select">
+  <div class="goods-detail-container">
     <div class="seller-top-bar">
       <div class="seller-top-left">
         <!-- 关键修改1：移除 size="32"，添加自定义 class -->
@@ -343,14 +358,27 @@ const handleBuyNow = () => {
             </div>
 
             <div class="main-image">
-              <img
+              <el-image
                   :src="goodsDetail.imageList[currentImageIndex]?.imageUrl || goodsDetail.goodsPic"
                   :alt="goodsDetail.goodsName"
-              />
-              <div class="image-nav left" @click="switchImage((currentImageIndex - 1 + goodsDetail.imageList.length) % goodsDetail.imageList.length)">
+                  :preview-src-list="previewImageList"
+                  fit="cover"
+                  class="main-image-img"
+                  preview-teleported="true"
+              >
+                <!-- 可选：图片加载失败时的占位 -->
+                <template #error>
+                  <div class="image-slot">加载失败</div>
+                </template>
+                <!-- 可选：图片加载中时的占位 -->
+                <template #placeholder>
+                  <div class="image-slot">加载中...</div>
+                </template>
+              </el-image>
+              <div class="image-nav left" @click="switchImage((currentImageIndex - 1 + (goodsDetail.imageList.length || 1)) % (goodsDetail.imageList.length || 1))">
                 <el-icon><ArrowLeftBold /></el-icon>
               </div>
-              <div class="image-nav right" @click="switchImage((currentImageIndex + 1) % goodsDetail.imageList.length)">
+              <div class="image-nav right" @click="switchImage((currentImageIndex + 1) % (goodsDetail.imageList.length || 1))">
                 <el-icon><ArrowRightBold /></el-icon>
               </div>
             </div>
@@ -540,6 +568,7 @@ const handleBuyNow = () => {
     flex-direction: column;
     gap: 30px;
     padding: 10px 0;
+    width: 100%;
   }
 
   .goods-main {
@@ -598,12 +627,30 @@ const handleBuyNow = () => {
       overflow: hidden;
       position: relative;
 
+      // 新增：强制图片占满容器
+      .main-image-img {
+        width: 100%;
+        height: 100%;
+      }
+
+      // 修复占位插槽样式，确保居中
+      .image-slot {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f5f5f5;
+        color: #999;
+      }
+
       img {
         width: 100%;
         height: 100%;
         object-fit: cover;
       }
 
+      // 原有样式保持不变
       .image-nav {
         position: absolute;
         top: 50%;
@@ -629,6 +676,34 @@ const handleBuyNow = () => {
 
         &.right {
           right: 15px;
+        }
+      }
+    }
+
+    // 移动端适配修复
+    @media screen and (max-width: 900px) {
+      .goods-images {
+        width: 100%;
+        flex-direction: column;
+
+        .thumbnail-list {
+          width: 100%;
+          height: 80px;
+          flex-direction: row;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding-bottom: 10px;
+        }
+
+        .main-image {
+          width: 100%;
+          height: auto;
+          aspect-ratio: 1/1; // 保持1:1比例，也可以改为固定高度如400px
+
+          .main-image-img {
+            width: 100%;
+            height: 100%;
+          }
         }
       }
     }

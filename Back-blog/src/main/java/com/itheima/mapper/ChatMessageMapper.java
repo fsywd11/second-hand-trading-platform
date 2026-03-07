@@ -18,7 +18,7 @@ public interface ChatMessageMapper {
     void insertMessage(ChatMessage message);
 
     /**
-     * 查询会话历史消息
+     * 查询会话历史消息（修复：移除手动 LIMIT，交给 PageHelper 处理）
      */
     @Select("""
         SELECT cm.*, u.nickname AS senderNickname, u.user_pic AS senderAvatar
@@ -26,9 +26,8 @@ public interface ChatMessageMapper {
         LEFT JOIN user u ON cm.sender_id = u.id
         WHERE cm.session_id = #{sessionId}
         ORDER BY cm.create_time ASC
-        LIMIT #{offset}, #{pageSize}
     """)
-    List<ChatMessage> selectMsgBySession(@Param("sessionId") Long sessionId, @Param("offset") Integer offset, @Param("pageSize") Integer pageSize);
+    List<ChatMessage> selectMsgBySession(@Param("sessionId") Long sessionId);
 
     /**
      * 标记消息为已读

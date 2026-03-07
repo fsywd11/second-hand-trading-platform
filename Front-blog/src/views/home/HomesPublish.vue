@@ -1,19 +1,28 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Plus, Close } from '@element-plus/icons-vue'
+import { ElMessage, ElLoading } from 'element-plus'
+import { Plus, Close} from '@element-plus/icons-vue' // 新增魔法棒图标
 import QuillEditor from '@/components/QuillEditor.vue'
 import { goodsAddService } from '@/api/goods.js'
-import { shopCategoryListService } from '@/api/shopcategory.js'
+import {
+  shopCategoryTreeListService,
+  shopCategoryChildListService
+} from '@/api/shopcategory.js'
+// 新增：引入AI生成商品描述接口
+import { generateGoodsDescService } from '@/api/AI.js'
 import { useTokenStore } from '@/stores/token.js'
 import useUserInfoStore from '@/stores/userInfo.js'
 
 const userInfoStore = useUserInfoStore()
 const router = useRouter()
 const tokenStore = useTokenStore()
-// 商品分类列表
-const categorys = ref([])
+
+// ========== 核心修改：分类数据结构调整 ==========
+const parentCategorys = ref([]) // 一级分类列表
+const childCategorys = ref([]) // 二级分类列表（根据选中的一级分类动态加载）
+const selectedParentId = ref('') // 选中的一级分类ID
+
 // 封面图文件（单文件）
 const coverFile = ref(null)
 // 封面图URL
@@ -22,6 +31,10 @@ const coverUrl = ref('')
 const detailFileList = ref([])
 // 详情图URL列表
 const detailUrlList = ref([])
+
+// 新增：AI生成相关变量
+const aiKeywords = ref('') // AI生成关键词
+const aiLoading = ref(false) // AI生成加载状态
 
 // 定义新旧程度选项（与后端GoodsIsNewEnum完全一致）
 const newDegreeOptions = ref([
@@ -36,7 +49,8 @@ const newDegreeOptions = ref([
 const goodsModel = ref({
   id: '',
   goodsName: '',
-  categoryId: '',
+  parentCategoryId: '', // 新增：一级分类ID
+  categoryId: '', // 保留：二级分类ID（实际提交用）
   originalPrice: 0,
   sellPrice: 0,
   isNew: 0, // 默认二手（对应后端枚举）
@@ -48,13 +62,79 @@ const goodsModel = ref({
   imageList: [] // 详情图列表
 })
 
-// 获取商品分类列表
-const getCategoryList = async () => {
+// ========== 新增：AI生成商品描述功能 ==========
+const generateGoodsDesc = async () => {
+  // 校验必要参数
+  if (!goodsModel.value.goodsName) {
+    return ElMessage.warning('请先输入商品名称')
+  }
+  if (!aiKeywords.value) {
+    return ElMessage.warning('请输入生成关键词')
+  }
+  if (goodsModel.value.sellPrice <= 0) {
+    return ElMessage.warning('请先填写售卖价格')
+  }
+
   try {
-    const result = await shopCategoryListService()
-    categorys.value = result.data
+    aiLoading.value = true
+    // 构造请求参数
+    const params = {
+      keywords: aiKeywords.value,
+      goodsName: goodsModel.value.goodsName,
+      isNew: goodsModel.value.isNew,
+      sellPrice: goodsModel.value.sellPrice
+    }
+
+    // 调用AI生成接口
+    const result = await generateGoodsDescService(params)
+
+    // 成功生成后填充到商品描述
+    if (result && result !== '生成失败，请重试！') {
+      goodsModel.value.goodsDesc = result.data
+      ElMessage.success('商品描述生成成功！')
+    } else {
+      ElMessage.error('生成失败，请重试！')
+    }
+  } catch (error) {
+    console.error('AI生成商品描述失败：', error)
+    ElMessage.error('生成失败：' + (error.message || '服务器错误'))
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+// ========== 核心修改：重构分类获取逻辑 ==========
+// 获取树形分类列表（一级+二级）
+const getCategoryTreeList = async () => {
+  try {
+    const result = await shopCategoryTreeListService()
+    if (result.code === 0) {
+      // 初始化一级分类列表
+      parentCategorys.value = result.data.map(item => ({
+        id: item.id,
+        categoryName: item.categoryName
+      }))
+    }
   } catch (error) {
     ElMessage.error('获取商品分类失败')
+  }
+}
+
+// 根据选中的一级分类加载二级分类
+const loadChildCategories = async (parentId) => {
+  if (!parentId) {
+    childCategorys.value = []
+    goodsModel.value.categoryId = '' // 清空二级分类选择
+    return
+  }
+  try {
+    const res = await shopCategoryChildListService(parentId)
+    if (res.code === 0) {
+      childCategorys.value = res.data
+      goodsModel.value.categoryId = '' // 切换一级分类时清空二级分类选中状态
+    }
+  } catch (error) {
+    ElMessage.error('获取子分类失败')
   }
 }
 
@@ -118,6 +198,10 @@ const handleDetailRemove = (uploadFile) => {
   if (index !== -1) {
     detailUrlList.value.splice(index, 1)
     goodsModel.value.imageList.splice(index, 1)
+    // 重新排序
+    goodsModel.value.imageList.forEach((item, idx) => {
+      item.sort = idx + 1
+    })
   }
 }
 
@@ -129,7 +213,8 @@ const uploadError = () => {
 // 提交商品
 const submitGoods = async () => {
   if (!goodsModel.value.goodsName) return ElMessage.warning('商品名称不能为空')
-  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择商品分类')
+  if (!goodsModel.value.parentCategoryId) return ElMessage.warning('请选择一级分类') // 修改
+  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择二级分类') // 修改
   if (goodsModel.value.originalPrice < 0) return ElMessage.warning('原价不能为负数')
   if (!goodsModel.value.sellPrice || goodsModel.value.sellPrice <= 0) return ElMessage.warning('售卖价格必须大于0')
   if (goodsModel.value.isNew === null || goodsModel.value.isNew === undefined) return ElMessage.warning('请选择新旧程度')
@@ -138,25 +223,39 @@ const submitGoods = async () => {
   if (!goodsModel.value.goodsPic) return ElMessage.warning('请上传商品封面图')
 
   try {
+    // 添加提交loading
+    const submitLoading = ElLoading.service({
+      lock: true,
+      text: '发布中...',
+      background: 'rgba(0, 0, 0, 0.7)'
+    })
+
     const submitData = {
       ...goodsModel.value,
       originalPrice: Number(goodsModel.value.originalPrice),
       sellPrice: Number(goodsModel.value.sellPrice),
-      categoryId: Number(goodsModel.value.categoryId),
+      categoryId: Number(goodsModel.value.categoryId), // 仅提交二级分类ID
       isNew: Number(goodsModel.value.isNew),
       sellerId: Number(goodsModel.value.sellerId),
       stock: Number(goodsModel.value.stock)
     }
     await goodsAddService(submitData)
     ElMessage.success('商品发布成功')
+    submitLoading.close()
     await router.push('/homes/mygoods')
   } catch (error) {
     ElMessage.error('发布失败：' + (error.message || '服务器错误'))
   }
 }
 
+// ========== 核心修改：监听一级分类变化 ==========
+watch(() => selectedParentId.value, async (newVal) => {
+  goodsModel.value.parentCategoryId = newVal
+  await loadChildCategories(newVal)
+}, { immediate: false })
+
 onMounted(() => {
-  getCategoryList()
+  getCategoryTreeList() // 修改：加载树形分类
 })
 </script>
 
@@ -217,6 +316,27 @@ onMounted(() => {
                     class="original-price-input"
                 />
               </div>
+            </div>
+          </div>
+
+          <!-- 新增：AI生成关键词输入框 -->
+          <div class="form-block">
+            <div class="block-title">AI生成描述关键词</div>
+            <div class="ai-input-group">
+              <el-input
+                  v-model="aiKeywords"
+                  placeholder="例如：高性能、轻薄、99新、功能完好"
+                  class="ai-keywords-input"
+              />
+              <el-button
+                  type="primary"
+                  icon="Magic"
+                  class="ai-generate-btn"
+                  @click="generateGoodsDesc"
+                  :loading="aiLoading"
+              >
+                智能生成
+              </el-button>
             </div>
           </div>
 
@@ -288,17 +408,45 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- ========== 核心修改：分类选择区域 ========== -->
           <div class="form-block">
             <div class="block-title">所属商品类别</div>
-            <div class="category-tags-container">
-              <div
-                  v-for="c in categorys"
-                  :key="c.id"
-                  class="tag-item"
-                  :class="{ 'active': goodsModel.categoryId === c.id }"
-                  @click="goodsModel.categoryId = c.id"
-              >
-                {{ c.categoryName }}
+            <div class="category-select-container">
+              <!-- 一级分类选择 -->
+              <div class="category-level-wrapper">
+                <div class="level-title">一级分类</div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in parentCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': selectedParentId === c.id }"
+                      @click="selectedParentId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 二级分类选择（有数据时显示） -->
+              <div class="category-level-wrapper" v-if="childCategorys.length > 0">
+                <div class="level-title">二级分类 <span class="required-tag">*</span></div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in childCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': goodsModel.categoryId === c.id }"
+                      @click="goodsModel.categoryId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 无二级分类提示 -->
+              <div class="no-child-tips" v-if="selectedParentId && childCategorys.length === 0">
+                该分类下暂无二级分类，请选择其他一级分类
               </div>
             </div>
           </div>
@@ -320,7 +468,7 @@ onMounted(() => {
                   v-model="goodsModel.goodsDesc"
                   previewTheme="vuepress"
                   codeTheme="atom"
-                  placeholder="请输入商品详细描述..."
+                  placeholder="请输入商品详细描述...（可使用上方AI智能生成）"
                   :height="350"
               />
             </div>
@@ -402,6 +550,31 @@ onMounted(() => {
   :deep(.el-input__wrapper) {
     border-radius: 4px;
     width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+// 新增：AI关键词输入框样式
+.ai-input-group {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+
+  .ai-keywords-input {
+    flex: 1;
+    box-sizing: border-box;
+
+    :deep(.el-input__wrapper) {
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+  }
+
+  .ai-generate-btn {
+    flex: 0 0 80px;
+    height: 40px;
     box-sizing: border-box;
   }
 }
@@ -614,7 +787,34 @@ onMounted(() => {
   font-size: 24px;
 }
 
-/* 分类标签容器 */
+/* ========== 核心修改：分类选择样式 ========== */
+.category-select-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.category-level-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.level-title {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+
+  .required-tag {
+    color: #f56c6c;
+    margin-left: 4px;
+  }
+}
+
 .category-tags-container {
   display: flex;
   gap: 8px;
@@ -631,12 +831,25 @@ onMounted(() => {
   color: #666;
   cursor: pointer;
   flex-shrink: 0; // 防止被压缩
+  transition: all 0.2s ease;
 
   &.active {
     background-color: #409eff;
     color: #fff;
     border-color: #409eff;
   }
+
+  &:hover:not(.active) {
+    border-color: #409eff;
+    color: #409eff;
+  }
+}
+
+.no-child-tips {
+  font-size: 12px;
+  color: #909399;
+  padding: 8px 0;
+  box-sizing: border-box;
 }
 
 /* 库存输入 */

@@ -1,16 +1,20 @@
 <script setup lang="js">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {Search, Refresh, Plus, Edit, DeleteFilled, Switch} from '@element-plus/icons-vue'
+import {Search, Refresh, Plus, Edit, DeleteFilled, Switch, Picture} from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTokenStore } from "@/stores/token.js"
 // 导入商品相关API
 import {
   goodsMyListService,
   goodsDeleteService,
-  goodsUpdateStatusService // 替换：导入统一的状态更新接口
+  goodsUpdateStatusService
 } from '@/api/goods.js'
-import { shopCategoryListService } from '@/api/shopcategory.js'
+// 导入分类相关API（适配层级分类）
+import {
+  shopCategoryTreeListService,
+  shopCategoryChildListService
+} from '@/api/shopcategory.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -20,13 +24,17 @@ const pageNum = ref(1)
 const pageSize = ref(12)
 const total = ref(0)
 const goodsList = ref([])
-const categoryList = ref([])
+// 分类相关数据
+const parentCategoryList = ref([]) // 一级分类列表
+const childCategoryList = ref([]) // 二级分类列表（联动加载）
+const allCategoryList = ref([]) // 全量扁平分类列表（用于展示）
 const loading = ref(false)
 const tokenStore = useTokenStore();
-// 查询条件
+// 查询条件（适配层级分类）
 const queryForm = ref({
   goodsName: '',
-  categoryId: '',
+  parentCategoryId: '', // 一级分类ID
+  childCategoryId: '',  // 二级分类ID（实际筛选用）
   goodsStatus: '',
   minPrice: '',
   maxPrice: ''
@@ -35,7 +43,8 @@ const queryForm = ref({
 // 判断当前是否处于搜索状态
 const isSearching = computed(() => {
   return queryForm.value.goodsName !== '' ||
-      queryForm.value.categoryId !== '' ||
+      queryForm.value.parentCategoryId !== '' ||
+      queryForm.value.childCategoryId !== '' ||
       queryForm.value.goodsStatus !== '' ||
       queryForm.value.minPrice !== '' ||
       queryForm.value.maxPrice !== ''
@@ -45,18 +54,64 @@ const isSearching = computed(() => {
 
 // 跳转发布商品页面
 const toPublish = () => {
-  router.push('/homes/publish')
+  const targetUrl = `${window.location.origin}/homes/publish`;
+  window.open(targetUrl, '_blank');
 }
 
-// 获取商品分类列表
-const getCategoryList = async () => {
+// 获取树形分类列表并扁平化处理
+const getCategoryTreeList = async () => {
   try {
-    const res = await shopCategoryListService()
+    const res = await shopCategoryTreeListService()
     if (res.code === 0) {
-      categoryList.value = res.data
+      // 扁平化处理：转为一维数组（用于商品分类名称展示）
+      const flatCategories = []
+      res.data.forEach(parent => {
+        // 添加一级分类
+        flatCategories.push({
+          id: parent.id,
+          categoryName: parent.categoryName,
+          parentId: 0
+        })
+        // 添加二级分类（带层级名称）
+        if (parent.children && parent.children.length > 0) {
+          parent.children.forEach(child => {
+            flatCategories.push({
+              id: child.id,
+              categoryName: `${parent.categoryName} > ${child.categoryName}`,
+              parentId: parent.id
+            })
+          })
+        }
+      })
+      allCategoryList.value = flatCategories
+
+      // 初始化一级分类下拉列表
+      parentCategoryList.value = res.data.map(item => ({
+        id: item.id,
+        categoryName: item.categoryName
+      }))
     }
   } catch (error) {
     console.error('获取分类列表异常', error)
+    ElMessage.error('获取分类列表失败')
+  }
+}
+
+// 根据选中的一级分类加载二级分类
+const loadChildCategories = async (parentId) => {
+  if (!parentId) {
+    childCategoryList.value = []
+    queryForm.value.childCategoryId = '' // 清空二级分类选择
+    return
+  }
+  try {
+    const res = await shopCategoryChildListService(parentId)
+    if (res.code === 0) {
+      childCategoryList.value = res.data
+    }
+  } catch (error) {
+    console.error('获取子分类异常', error)
+    ElMessage.error('获取子分类失败')
   }
 }
 
@@ -64,11 +119,18 @@ const getCategoryList = async () => {
 const getGoodsList = async () => {
   loading.value = true
   try {
+    // 构造查询参数（兼容一级/二级分类筛选）
     const queryData = {
       pageNum: pageNum.value,
       pageSize: pageSize.value,
-      ...queryForm.value
+      goodsName: queryForm.value.goodsName,
+      // 优先用二级分类ID，无则用一级分类ID
+      categoryId: queryForm.value.childCategoryId || queryForm.value.parentCategoryId,
+      goodsStatus: queryForm.value.goodsStatus,
+      minPrice: queryForm.value.minPrice,
+      maxPrice: queryForm.value.maxPrice
     }
+
     if(tokenStore.token!==''){
       const res = await goodsMyListService(queryData)
       if (res.code === 0) {
@@ -97,7 +159,15 @@ const onCurrentChange = (num) => {
 
 // 重置查询条件
 const resetSearchCondition = () => {
-  queryForm.value = { goodsName: '', categoryId: '', goodsStatus: '', minPrice: '', maxPrice: '' }
+  queryForm.value = {
+    goodsName: '',
+    parentCategoryId: '',
+    childCategoryId: '',
+    goodsStatus: '',
+    minPrice: '',
+    maxPrice: ''
+  }
+  childCategoryList.value = []
   pageNum.value = 1
   getGoodsList()
 }
@@ -115,13 +185,11 @@ const goodsDelete = (row) => {
 
 // 标记商品售出方法
 const goodsSoldOut = (row) => {
-  // 防止重复标记为售出
   if (row.goodsStatus === 1) {
     ElMessage.warning('该商品已标记为售出状态')
     return
   }
 
-  // 只有在售/下架商品可以标记为售出
   if (![2, 3].includes(row.goodsStatus)) {
     ElMessage.warning('该商品状态不支持标记为售出')
     return
@@ -137,11 +205,10 @@ const goodsSoldOut = (row) => {
       }
   ).then(async () => {
     try {
-      // 修改：使用统一的状态更新接口，传入状态2（已售出）
       const res = await goodsUpdateStatusService(row.id, 1)
       if (res.code === 0) {
         ElMessage.success('商品标记为售出成功')
-        await getGoodsList() // 刷新列表
+        await getGoodsList()
       } else {
         ElMessage.error('标记失败：' + res.message)
       }
@@ -155,13 +222,11 @@ const goodsSoldOut = (row) => {
 
 // 下架商品方法
 const goodsOffShelf = (row) => {
-  // 防止重复下架
   if (row.goodsStatus === 3) {
     ElMessage.warning('该商品已处于下架状态')
     return
   }
 
-  // 只有售出状态的商品可以执行下架操作
   if (row.goodsStatus !== 1) {
     ElMessage.warning('仅售出状态的商品可执行此操作')
     return
@@ -177,11 +242,10 @@ const goodsOffShelf = (row) => {
       }
   ).then(async () => {
     try {
-      // 修改：使用统一的状态更新接口，传入状态3（下架）
       const res = await goodsUpdateStatusService(row.id, 3)
       if (res.code === 0) {
         ElMessage.success('商品下架成功')
-        await getGoodsList() // 刷新列表
+        await getGoodsList()
       } else {
         ElMessage.error('下架失败：' + res.message)
       }
@@ -195,12 +259,9 @@ const goodsOffShelf = (row) => {
 
 // 动态处理按钮点击事件
 const handleStatusToggle = (row) => {
-  // 售出状态(1) -> 执行下架操作
   if (row.goodsStatus === 1) {
     goodsOffShelf(row)
-  }
-  // 非售出状态(2/3) -> 执行标记售出操作
-  else {
+  } else {
     goodsSoldOut(row)
   }
 }
@@ -221,11 +282,13 @@ watch(() => route.fullPath, async () => {
 
 // 跳转到商品详情
 const goToDetail = (id) => {
-  router.push(`/goods/detail/${id}`)
+  const targetUrl = `${window.location.origin}/goods/detail/${id}`;
+  window.open(targetUrl, '_blank');
 }
 
+// 初始化加载
 onMounted(async () => {
-  await getCategoryList()
+  await getCategoryTreeList()
   await getGoodsList()
 })
 </script>
@@ -253,11 +316,37 @@ onMounted(async () => {
           <el-form-item label="名称">
             <el-input v-model="queryForm.goodsName" placeholder="商品名称" clearable style="width: 150px"/>
           </el-form-item>
-          <el-form-item label="分类">
-            <el-select v-model="queryForm.categoryId" placeholder="全部分类" clearable style="width: 120px" @change="getGoodsList">
-              <el-option v-for="c in categoryList" :key="c.id" :label="c.categoryName" :value="c.id"/>
+
+          <!-- 一级分类筛选 -->
+          <el-form-item label="一级分类">
+            <el-select
+                v-model="queryForm.parentCategoryId"
+                placeholder="全部分类"
+                clearable
+                style="width: 120px"
+                @change="(val) => {
+                loadChildCategories(val);
+                queryForm.childCategoryId = '';
+                getGoodsList();
+              }"
+            >
+              <el-option v-for="c in parentCategoryList" :key="c.id" :label="c.categoryName" :value="c.id"/>
             </el-select>
           </el-form-item>
+
+          <!-- 二级分类筛选（有数据时显示） -->
+          <el-form-item label="二级分类" v-if="childCategoryList.length > 0">
+            <el-select
+                v-model="queryForm.childCategoryId"
+                placeholder="全部子类"
+                clearable
+                style="width: 120px"
+                @change="getGoodsList"
+            >
+              <el-option v-for="c in childCategoryList" :key="c.id" :label="c.categoryName" :value="c.id"/>
+            </el-select>
+          </el-form-item>
+
           <el-form-item label="状态">
             <el-select v-model="queryForm.goodsStatus" placeholder="全部" clearable style="width: 100px" @change="getGoodsList">
               <el-option label="在售" :value="1"></el-option>
@@ -265,6 +354,25 @@ onMounted(async () => {
               <el-option label="下架" :value="3"></el-option>
             </el-select>
           </el-form-item>
+
+          <el-form-item label="价格区间">
+            <el-input
+                v-model="queryForm.minPrice"
+                placeholder="最低价格"
+                clearable
+                style="width: 80px"
+                type="number"
+            />
+            <span style="margin: 0 5px">-</span>
+            <el-input
+                v-model="queryForm.maxPrice"
+                placeholder="最高价格"
+                clearable
+                style="width: 80px"
+                type="number"
+            />
+          </el-form-item>
+
           <el-form-item>
             <el-button type="primary" :icon="Search" @click="getGoodsList">搜索</el-button>
             <el-button :icon="Refresh" @click="resetSearchCondition">重置</el-button>
@@ -284,7 +392,9 @@ onMounted(async () => {
                 lazy
             >
               <template #error>
-                <div class="image-slot">无图</div>
+                <div class="image-slot">
+                  <el-icon size="48" color="#bfbfbf"><Picture /></el-icon>
+                </div>
               </template>
             </el-image>
             <span class="status-badge" :class="'status-' + item.goodsStatus">
@@ -293,6 +403,10 @@ onMounted(async () => {
           </div>
 
           <div class="card-info">
+            <!-- 商品分类层级展示 -->
+            <div class="goods-category" v-if="item.categoryId">
+              {{ allCategoryList.find(c => c.id === item.categoryId)?.categoryName || '未知分类' }}
+            </div>
             <div class="goods-title" :title="item.goodsName">{{ item.goodsName }}</div>
 
             <div class="price-row">
@@ -300,12 +414,11 @@ onMounted(async () => {
                 <span class="currency">¥</span>
                 <span class="amount">{{ item.sellPrice }}</span>
               </div>
-              <div class="want-count">{{ item.likeCount || 0 }}人想要</div>
+              <div class="want-count">{{ item.collectCount || 0 }}人想要</div>
             </div>
 
             <div class="action-row">
               <button class="custom-btn edit-btn" @click="toEditGoods(item)"><el-icon><Edit /></el-icon>编辑</button>
-              <!-- 动态按钮：根据商品状态切换文本、样式和功能 -->
               <button
                   class="custom-btn"
                   @click="handleStatusToggle(item)"
@@ -342,7 +455,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   background-color: #ffffff;
-  /* 左右边界距离修改为 100px */
   padding: 10px;
   box-sizing: border-box;
 
@@ -390,17 +502,20 @@ onMounted(async () => {
   }
 }
 
+// 核心修改：固定卡片网格布局和尺寸
 .goods-grid {
   display: grid;
-  /* 根据左右100px的边距，卡片宽度自适应 */
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, 240px); // 固定列宽
   gap: 24px;
   padding-bottom: 40px;
   flex: 1;
   align-content: flex-start;
+  justify-content: start; // 左对齐，保证卡片排列整齐
 }
 
 .goods-card {
+  width: 240px; // 固定卡片宽度
+  height: 420px; // 固定卡片高度
   background: #fff;
   border-radius: 12px;
   overflow: hidden;
@@ -409,23 +524,27 @@ onMounted(async () => {
   border: 1px solid #f0f0f0;
   display: flex;
   flex-direction: column;
+  justify-content: space-between; // 内容垂直分布
 
   &:hover {
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
     transform: translateY(-4px);
   }
 
+  // 核心修改：固定图片容器尺寸
   .card-img-wrapper {
     position: relative;
     width: 100%;
-    /* 保持图片比例 */
-    aspect-ratio: 1 / 1;
+    height: 240px; // 固定图片容器高度
     cursor: pointer;
     background-color: #f7f8fa;
+    overflow: hidden; // 防止图片溢出
 
     .goods-img {
       width: 100%;
       height: 100%;
+      object-fit: cover; // 保持图片比例并填充容器
+      object-position: center; // 图片居中显示
     }
 
     .image-slot {
@@ -458,6 +577,15 @@ onMounted(async () => {
     padding: 16px;
     display: flex;
     flex-direction: column;
+    flex: 1; // 填充剩余空间
+    justify-content: space-between; // 内容均匀分布
+
+    // 新增：分类名称样式
+    .goods-category {
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 4px;
+    }
 
     .goods-title {
       font-size: 16px;
@@ -469,7 +597,7 @@ onMounted(async () => {
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      height: 48px;
+      height: 48px; // 固定标题高度
     }
 
     .price-row {
@@ -505,7 +633,6 @@ onMounted(async () => {
 
         &:active { transform: scale(0.97); }
 
-        // 禁用状态样式（保留，以备后续扩展）
         &.disabled {
           background-color: #ccc !important;
           cursor: not-allowed;
@@ -515,7 +642,6 @@ onMounted(async () => {
       }
 
       .edit-btn { background-color: #79af53; &:hover { background-color: #6a9a48; } }
-      /* 标记售出和下架按钮样式 */
       .sold-out-btn { background-color: #e6a23c; &:hover { background-color: #d4912f; } }
       .delete-btn { background-color: #7d848e; &:hover { background-color: #6c737c; } }
     }
@@ -528,8 +654,7 @@ onMounted(async () => {
   justify-content: center;
 }
 
-// ========== 移动端适配样式 ==========
-// 平板设备 (768px - 1024px)
+// 移动端适配样式 - 保持卡片比例一致
 @media screen and (max-width: 1024px) {
   .my-goods-container {
     padding: 40px 50px;
@@ -559,11 +684,18 @@ onMounted(async () => {
   }
 
   .goods-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, 200px); // 适配平板尺寸
     gap: 20px;
   }
 
   .goods-card {
+    width: 200px; // 适配平板尺寸
+    height: 380px; // 适配平板尺寸
+
+    .card-img-wrapper {
+      height: 200px; // 适配平板尺寸
+    }
+
     .card-info {
       padding: 14px;
 
@@ -593,7 +725,6 @@ onMounted(async () => {
   }
 }
 
-// 手机设备 (小于768px)
 @media screen and (max-width: 768px) {
   .my-goods-container {
     padding: 20px 15px;
@@ -664,13 +795,18 @@ onMounted(async () => {
   }
 
   .goods-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, 140px); // 适配手机尺寸
     gap: 15px;
     padding-bottom: 30px;
   }
 
   .goods-card {
+    width: 140px; // 适配手机尺寸
+    height: 300px; // 适配手机尺寸
+
     .card-img-wrapper {
+      height: 140px; // 适配手机尺寸
+
       .status-badge {
         top: 8px;
         right: 8px;
@@ -681,6 +817,10 @@ onMounted(async () => {
 
     .card-info {
       padding: 12px;
+
+      .goods-category {
+        font-size: 11px;
+      }
 
       .goods-title {
         font-size: 14px;
@@ -731,14 +871,20 @@ onMounted(async () => {
   }
 }
 
-// 小屏手机 (小于480px)
 @media screen and (max-width: 480px) {
   .goods-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, 120px); // 适配小屏手机
     gap: 10px;
   }
 
   .goods-card {
+    width: 120px; // 适配小屏手机
+    height: 260px; // 适配小屏手机
+
+    .card-img-wrapper {
+      height: 120px; // 适配小屏手机
+    }
+
     .card-info {
       .goods-title {
         font-size: 13px;

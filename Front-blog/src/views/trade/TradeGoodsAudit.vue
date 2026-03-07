@@ -1,11 +1,16 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Plus, Close } from '@element-plus/icons-vue'
+import { ElMessage, ElLoading } from 'element-plus'
+// 核心修改：替换Magic为MagicWand（或其他可用图标）
+import { Plus, Close, Edit} from '@element-plus/icons-vue'
 import QuillEditor from '@/components/QuillEditor.vue'
 import { goodsAddService } from '@/api/goods.js'
-import { shopCategoryListService } from '@/api/shopcategory.js'
+import {
+  shopCategoryTreeListService,
+  shopCategoryChildListService
+} from '@/api/shopcategory.js'
+import { generateGoodsDescService } from '@/api/AI.js'
 import { useTokenStore } from '@/stores/token.js'
 import { useTagsViewStore } from '@/stores/tagsView.js'
 import useUserInfoStore from '@/stores/userInfo.js'
@@ -15,18 +20,22 @@ const router = useRouter()
 const tokenStore = useTokenStore()
 const tagsViewStore = useTagsViewStore()
 
-// 商品分类列表
-const categorys = ref([])
-// 封面图文件（单文件）
+// ========== 分类数据结构 ==========
+const parentCategorys = ref([])
+const childCategorys = ref([])
+const selectedParentId = ref('')
+
+// 图片相关变量
 const coverFile = ref(null)
-// 封面图URL
 const coverUrl = ref('')
-// 详情图文件列表
 const detailFileList = ref([])
-// 详情图URL列表
 const detailUrlList = ref([])
 
-// 定义新旧程度选项（与后端GoodsIsNewEnum完全一致）
+// AI生成相关变量
+const aiKeywords = ref('')
+const aiLoading = ref(false)
+
+// 新旧程度选项
 const newDegreeOptions = ref([
   { label: '二手', value: 0 },
   { label: '全新', value: 1 },
@@ -35,43 +44,103 @@ const newDegreeOptions = ref([
   { label: '7成新及以下', value: 4 }
 ])
 
-// 商品表单模型 - 适配后端GoodsDTO
+// 商品表单模型
 const goodsModel = ref({
   id: '',
   goodsName: '',
+  parentCategoryId: '',
   categoryId: '',
   originalPrice: 0,
   sellPrice: 0,
-  isNew: 0, // 默认二手（对应后端枚举）
-  goodsStatus: 1, // 默认在售
+  isNew: 0,
+  goodsStatus: 1,
   goodsDesc: '',
-  goodsPic: '', // 封面图（单个）
+  goodsPic: '',
   stock: 1,
   sellerId: userInfoStore.info.id || null,
-  imageList: [] // 详情图列表
+  imageList: []
 })
 
-// 获取商品分类列表
-const getCategoryList = async () => {
+// AI生成商品描述功能
+const generateGoodsDesc = async () => {
+  if (!goodsModel.value.goodsName) {
+    return ElMessage.warning('请先输入商品名称')
+  }
+  if (!aiKeywords.value) {
+    return ElMessage.warning('请输入生成关键词')
+  }
+  if (goodsModel.value.sellPrice <= 0) {
+    return ElMessage.warning('请先填写售卖价格')
+  }
+
   try {
-    const result = await shopCategoryListService()
-    categorys.value = result.data
+    aiLoading.value = true
+    const params = {
+      keywords: aiKeywords.value,
+      goodsName: goodsModel.value.goodsName,
+      isNew: goodsModel.value.isNew,
+      sellPrice: goodsModel.value.sellPrice
+    }
+
+    const result = await generateGoodsDescService(params)
+
+    if (result && result !== '生成失败，请重试！') {
+      goodsModel.value.goodsDesc = result.data
+      ElMessage.success('商品描述生成成功！')
+    } else {
+      ElMessage.error('生成失败，请重试！')
+    }
+  } catch (error) {
+    console.error('AI生成商品描述失败：', error)
+    ElMessage.error('生成失败：' + (error.message || '服务器错误'))
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+// 获取分类列表
+const getCategoryTreeList = async () => {
+  try {
+    const result = await shopCategoryTreeListService()
+    if (result.code === 0) {
+      parentCategorys.value = result.data.map(item => ({
+        id: item.id,
+        categoryName: item.categoryName
+      }))
+    }
   } catch (error) {
     ElMessage.error('获取商品分类失败')
   }
 }
 
-// 封面图选择回调（覆盖式）
+// 加载二级分类
+const loadChildCategories = async (parentId) => {
+  if (!parentId) {
+    childCategorys.value = []
+    goodsModel.value.categoryId = ''
+    return
+  }
+  try {
+    const res = await shopCategoryChildListService(parentId)
+    if (res.code === 0) {
+      childCategorys.value = res.data
+      goodsModel.value.categoryId = ''
+    }
+  } catch (error) {
+    ElMessage.error('获取子分类失败')
+  }
+}
+
+// 封面图上传
 const coverInput = ref(null)
 const handleCoverChange = async (file) => {
   if (!file) return
-  const maxSize = 5 * 1024 * 1024 // 5MB
+  const maxSize = 5 * 1024 * 1024
   if (file.size > maxSize) {
     ElMessage.warning('封面图大小不能超过5MB')
     return
   }
   coverFile.value = file
-  // 模拟上传（实际替换为你的上传接口）
   try {
     const formData = new FormData()
     formData.append('file', file)
@@ -106,11 +175,10 @@ const detailUploadSuccess = (response, uploadFile) => {
   const url = response.data.url
   uploadFile.url = url
   detailUrlList.value.push(url)
-  // 构建GoodsImage对象，适配后端DTO
   goodsModel.value.imageList.push({
     goodsId: goodsModel.value.id || 0,
     imageUrl: url,
-    sort: detailUrlList.value.length // 排序值
+    sort: detailUrlList.value.length
   })
   ElMessage.success('详情图上传成功')
 }
@@ -121,6 +189,9 @@ const handleDetailRemove = (uploadFile) => {
   if (index !== -1) {
     detailUrlList.value.splice(index, 1)
     goodsModel.value.imageList.splice(index, 1)
+    goodsModel.value.imageList.forEach((item, idx) => {
+      item.sort = idx + 1
+    })
   }
 }
 
@@ -132,7 +203,8 @@ const uploadError = () => {
 // 提交商品
 const submitGoods = async () => {
   if (!goodsModel.value.goodsName) return ElMessage.warning('商品名称不能为空')
-  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择商品分类')
+  if (!goodsModel.value.parentCategoryId) return ElMessage.warning('请选择一级分类')
+  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择二级分类')
   if (goodsModel.value.originalPrice < 0) return ElMessage.warning('原价不能为负数')
   if (!goodsModel.value.sellPrice || goodsModel.value.sellPrice <= 0) return ElMessage.warning('售卖价格必须大于0')
   if (goodsModel.value.isNew === null || goodsModel.value.isNew === undefined) return ElMessage.warning('请选择新旧程度')
@@ -141,6 +213,12 @@ const submitGoods = async () => {
   if (!goodsModel.value.goodsPic) return ElMessage.warning('请上传商品封面图')
 
   try {
+    const submitLoading = ElLoading.service({
+      lock: true,
+      text: '发布中...',
+      background: 'rgba(0, 0, 0, 0.7)'
+    })
+
     const submitData = {
       ...goodsModel.value,
       originalPrice: Number(goodsModel.value.originalPrice),
@@ -152,6 +230,7 @@ const submitGoods = async () => {
     }
     await goodsAddService(submitData)
     ElMessage.success('商品发布成功')
+    submitLoading.close()
     handleClose(router.currentRoute.value.path)
   } catch (error) {
     ElMessage.error('发布失败：' + (error.message || '服务器错误'))
@@ -173,13 +252,14 @@ const handleClose = (path) => {
     router.push(prevTag.path)
   }
 
-  // 重置表单数据
+  aiKeywords.value = ''
   coverFile.value = null
   coverUrl.value = ''
   detailFileList.value = []
   detailUrlList.value = []
+  selectedParentId.value = ''
   goodsModel.value = {
-    id: '', goodsName: '', categoryId: '', originalPrice: 0, sellPrice: 0,
+    id: '', goodsName: '', parentCategoryId: '', categoryId: '', originalPrice: 0, sellPrice: 0,
     isNew: 0, goodsStatus: 1, goodsDesc: '', goodsPic: '', stock: 1,
     sellerId: userInfoStore.info.id || null,
     imageList: []
@@ -187,8 +267,14 @@ const handleClose = (path) => {
   tagsViewStore.delTagsItem(index)
 }
 
+// 监听一级分类变化
+watch(() => selectedParentId.value, async (newVal) => {
+  goodsModel.value.parentCategoryId = newVal
+  await loadChildCategories(newVal)
+}, { immediate: false })
+
 onMounted(() => {
-  getCategoryList()
+  getCategoryTreeList()
 })
 </script>
 
@@ -208,7 +294,6 @@ onMounted(() => {
 
           <div class="form-block">
             <div class="block-title">新旧程度</div>
-            <!-- 替换为下拉选择器，更友好且避免输入错误 -->
             <el-select
                 v-model="goodsModel.isNew"
                 placeholder="请选择商品新旧程度"
@@ -221,7 +306,6 @@ onMounted(() => {
                   :value="item.value"
               />
             </el-select>
-            <!-- 移除错误的数字提示，下拉选择器已直观展示 -->
           </div>
 
           <div class="form-block">
@@ -252,6 +336,28 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- AI生成关键词输入框 -->
+          <div class="form-block">
+            <div class="block-title">AI生成描述关键词</div>
+            <div class="ai-input-group">
+              <el-input
+                  v-model="aiKeywords"
+                  placeholder="例如：高性能、轻薄、99新、功能完好"
+                  class="ai-keywords-input"
+              />
+              <!-- 核心修改：替换icon为MagicWand -->
+              <el-button
+                  type="primary"
+                  :icon="Edit"
+                  class="ai-generate-btn"
+                  @click="generateGoodsDesc"
+                  :loading="aiLoading"
+              >
+                智能生成
+              </el-button>
+            </div>
+          </div>
+
           <div class="form-block">
             <el-button
                 type="primary"
@@ -264,10 +370,8 @@ onMounted(() => {
         </div>
 
         <div class="right-panel">
-
           <div class="form-block">
             <div class="block-title">产品图</div>
-
             <div class="images-inline-container">
               <div class="img-group">
                 <div class="section-title">封面图</div>
@@ -320,17 +424,42 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- 分类选择区域 -->
           <div class="form-block">
             <div class="block-title">所属商品类别</div>
-            <div class="category-tags-container">
-              <div
-                  v-for="c in categorys"
-                  :key="c.id"
-                  class="tag-item"
-                  :class="{ 'active': goodsModel.categoryId === c.id }"
-                  @click="goodsModel.categoryId = c.id"
-              >
-                {{ c.categoryName }}
+            <div class="category-select-container">
+              <div class="category-level-wrapper">
+                <div class="level-title">一级分类</div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in parentCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': selectedParentId === c.id }"
+                      @click="selectedParentId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="category-level-wrapper" v-if="childCategorys.length > 0">
+                <div class="level-title">二级分类 <span class="required-tag">*</span></div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in childCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': goodsModel.categoryId === c.id }"
+                      @click="goodsModel.categoryId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="no-child-tips" v-if="selectedParentId && childCategorys.length === 0">
+                该分类下暂无二级分类，请选择其他一级分类
               </div>
             </div>
           </div>
@@ -352,7 +481,7 @@ onMounted(() => {
                   v-model="goodsModel.goodsDesc"
                   previewTheme="vuepress"
                   codeTheme="atom"
-                  placeholder="请输入商品详细描述..."
+                  placeholder="请输入商品详细描述...（可使用上方AI智能生成）"
                   :height="350"
               />
             </div>
@@ -364,16 +493,14 @@ onMounted(() => {
 </template>
 
 <style lang="scss" scoped>
-// 全局容器：限制最大宽度，添加内边距，防止溢出
 .goods-publish-container {
   padding: 16px;
   background-color: #fff;
   min-height: 100vh;
-  box-sizing: border-box; // 内边距计入宽度，防止溢出
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.05);  //边框阴影
+  box-sizing: border-box;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.05);
 }
 
-// 主包装器：限制最大宽度，居中显示
 .main-wrapper {
   max-width: 1400px;
   margin: 0 auto;
@@ -381,27 +508,25 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-// 主布局：响应式适配，小屏幕自动堆叠
 .main-layout {
   display: flex;
   gap: 24px;
   width: 100%;
-  flex-wrap: wrap; // 小屏幕自动换行
+  flex-wrap: wrap;
   box-sizing: border-box;
 
   .left-panel {
-    flex: 0 0 280px; // 固定宽度，不伸缩
-    min-width: 280px; // 最小宽度，防止被压缩
+    flex: 0 0 280px;
+    min-width: 280px;
     box-sizing: border-box;
   }
 
   .right-panel {
-    flex: 1; // 自适应剩余宽度
-    min-width: 300px; // 最小宽度，保证可用性
+    flex: 1;
+    min-width: 300px;
     box-sizing: border-box;
   }
 
-  // 响应式：屏幕小于768px时，左右面板堆叠
   @media (max-width: 768px) {
     flex-direction: column;
     .left-panel, .right-panel {
@@ -411,7 +536,6 @@ onMounted(() => {
   }
 }
 
-/* 通用区块标题 */
 .block-title {
   font-size: 14px;
   color: #333;
@@ -425,7 +549,6 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-/* 左侧面板样式 */
 .goods-name-input {
   width: 100%;
   font-size: 16px;
@@ -438,7 +561,30 @@ onMounted(() => {
   }
 }
 
-// 新增：新旧程度下拉选择器样式
+.ai-input-group {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+
+  .ai-keywords-input {
+    flex: 1;
+    box-sizing: border-box;
+
+    :deep(.el-input__wrapper) {
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+  }
+
+  .ai-generate-btn {
+    flex: 0 0 80px;
+    height: 40px;
+    box-sizing: border-box;
+  }
+}
+
 .new-degree-select {
   width: 100%;
   box-sizing: border-box;
@@ -450,7 +596,6 @@ onMounted(() => {
   }
 }
 
-/* 价格组：原价 + 现价 */
 .price-group {
   display: flex;
   flex-direction: column;
@@ -511,11 +656,10 @@ onMounted(() => {
   }
 }
 
-/* 右侧面板 - 产品图同行排版样式 */
 .images-inline-container {
   display: flex;
-  flex-wrap: wrap; // 允许同行超宽时整体换行
-  gap: 24px; // 封面和详情图模块之间的间距
+  flex-wrap: wrap;
+  gap: 24px;
   align-items: flex-start;
   width: 100%;
   box-sizing: border-box;
@@ -524,12 +668,12 @@ onMounted(() => {
 .img-group {
   display: flex;
   flex-direction: column;
-  gap: 8px; // 标题与图表框间距
+  gap: 8px;
   max-width: 100%;
 }
 
 .detail-group {
-  flex: 1; // 占满剩余宽度，防止详情图挤压溢出
+  flex: 1;
   min-width: 0;
 }
 
@@ -538,7 +682,6 @@ onMounted(() => {
   color: #666;
 }
 
-/* 封面图上传框：核心样式 */
 .cover-img-box {
   width: 120px;
   height: 120px;
@@ -603,10 +746,9 @@ onMounted(() => {
   }
 }
 
-/* 详情图上传：内部自动换行防溢出 */
 .detail-img-upload {
   display: flex;
-  flex-wrap: wrap; // 允许图片超出时换行
+  flex-wrap: wrap;
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
@@ -616,13 +758,13 @@ onMounted(() => {
     height: 120px;
     border-radius: 4px;
     margin: 0;
-    flex-shrink: 0; // 防止被压缩
+    flex-shrink: 0;
   }
 
   :deep(.el-upload-list) {
     display: flex;
     gap: 10px;
-    flex-wrap: wrap; // 核心：多张图片自动换行且不溢出
+    flex-wrap: wrap;
     width: 100%;
     margin: 0;
 
@@ -631,7 +773,7 @@ onMounted(() => {
       height: 120px;
       margin: 0;
       border-radius: 4px;
-      flex-shrink: 0; // 防止被压缩
+      flex-shrink: 0;
     }
   }
 }
@@ -646,11 +788,37 @@ onMounted(() => {
   font-size: 24px;
 }
 
-/* 分类标签容器 */
+.category-select-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.category-level-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.level-title {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+
+  .required-tag {
+    color: #f56c6c;
+    margin-left: 4px;
+  }
+}
+
 .category-tags-container {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap; // 自动换行
+  flex-wrap: wrap;
   width: 100%;
   box-sizing: border-box;
 }
@@ -662,19 +830,31 @@ onMounted(() => {
   font-size: 13px;
   color: #666;
   cursor: pointer;
-  flex-shrink: 0; // 防止被压缩
+  flex-shrink: 0;
+  transition: all 0.2s ease;
 
   &.active {
     background-color: #409eff;
     color: #fff;
     border-color: #409eff;
   }
+
+  &:hover:not(.active) {
+    border-color: #409eff;
+    color: #409eff;
+  }
 }
 
-/* 库存输入 */
+.no-child-tips {
+  font-size: 12px;
+  color: #909399;
+  padding: 8px 0;
+  box-sizing: border-box;
+}
+
 .stock-input {
   width: 200px;
-  max-width: 100%; // 不超过容器宽度
+  max-width: 100%;
   box-sizing: border-box;
 
   :deep(.el-input-number__wrapper) {
@@ -684,10 +864,9 @@ onMounted(() => {
   }
 }
 
-/* 富文本编辑器容器 */
 .editor-container {
   width: 100%;
-  max-width: 100%; // 不超过容器宽度
+  max-width: 100%;
   box-sizing: border-box;
 }
 

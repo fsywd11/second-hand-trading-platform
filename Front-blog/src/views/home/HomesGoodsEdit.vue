@@ -1,11 +1,14 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElLoading } from 'element-plus'
 import { Plus, Close } from '@element-plus/icons-vue'
 import QuillEditor from '@/components/QuillEditor.vue'
 import { goodsDetailService, goodsUpdateService } from '@/api/goods.js'
-import { shopCategoryListService } from '@/api/shopcategory.js'
+import {
+  shopCategoryTreeListService,
+  shopCategoryChildListService
+} from '@/api/shopcategory.js'
 import { useTokenStore } from '@/stores/token.js'
 import useUserInfoStore from '@/stores/userInfo.js'
 
@@ -13,21 +16,24 @@ const userInfoStore = useUserInfoStore()
 const router = useRouter()
 const route = useRoute()
 const tokenStore = useTokenStore()
-// 商品分类列表
-const categorys = ref([])
-// 封面图文件（单文件）
+
+// loading实例引用
+let loadingInstance = null
+
+// 分类数据结构
+const parentCategorys = ref([])
+const childCategorys = ref([])
+const selectedParentId = ref('')
+// 封面图相关
 const coverFile = ref(null)
-// 封面图URL
 const coverUrl = ref('')
-// 详情图文件列表
 const detailFileList = ref([])
-// 详情图URL列表
 const detailUrlList = ref([])
 
-// 页面加载状态（仅保留页面级加载，移除图片加载）
+// 页面加载状态
 const pageLoading = ref(true)
 
-// 定义新旧程度选项（与后端GoodsIsNewEnum完全一致）
+// 新旧程度选项
 const newDegreeOptions = ref([
   { label: '二手', value: 0 },
   { label: '全新', value: 1 },
@@ -36,10 +42,11 @@ const newDegreeOptions = ref([
   { label: '7成新及以下', value: 4 }
 ])
 
-// 商品表单模型 - 适配后端GoodsDTO
+// 商品表单模型
 const goodsModel = ref({
   id: '',
   goodsName: '',
+  parentCategoryId: '',
   categoryId: '',
   originalPrice: 0,
   sellPrice: 0,
@@ -52,20 +59,52 @@ const goodsModel = ref({
   imageList: []
 })
 
-// 获取商品分类列表
-const getCategoryList = async () => {
+// 获取树形分类列表
+const getCategoryTreeList = async () => {
   try {
-    const result = await shopCategoryListService()
-    categorys.value = result.data
+    const result = await shopCategoryTreeListService()
+    if (result.code === 0) {
+      parentCategorys.value = result.data.map(item => ({
+        id: item.id,
+        categoryName: item.categoryName
+      }))
+    }
   } catch (error) {
     ElMessage.error('获取商品分类失败')
   }
 }
 
-// 获取商品详情数据
+// 加载二级分类
+const loadChildCategories = async (parentId) => {
+  if (!parentId) {
+    childCategorys.value = []
+    goodsModel.value.categoryId = ''
+    return
+  }
+  try {
+    const res = await shopCategoryChildListService(parentId)
+    if (res.code === 0) {
+      childCategorys.value = res.data
+      if (goodsModel.value.categoryId &&
+          !res.data.some(item => item.id === goodsModel.value.categoryId)) {
+        goodsModel.value.categoryId = ''
+      }
+    }
+  } catch (error) {
+    ElMessage.error('获取子分类失败')
+  }
+}
+
+// 获取商品详情
 const getGoodsDetail = async () => {
   try {
-    pageLoading.value = true
+    // 创建loading实例
+    loadingInstance = ElLoading.service({
+      fullscreen: true,
+      lock: true,
+      text: '正在加载商品信息...'
+    })
+
     const goodsId = route.query.id || JSON.parse(sessionStorage.getItem('editGoods') || '{}').id
     if (!goodsId) {
       ElMessage.warning('商品ID不存在，无法编辑')
@@ -73,10 +112,8 @@ const getGoodsDetail = async () => {
       return
     }
 
-    // 获取商品详情
     const res = await goodsDetailService(goodsId)
     const goodsData = res.data
-    console.log('goodsData', goodsData)
 
     // 基础信息映射
     goodsModel.value = {
@@ -86,7 +123,26 @@ const getGoodsDetail = async () => {
       isNew: Number(goodsData.isNew) || 0,
       goodsStatus: Number(goodsData.goodsStatus) || 1,
       stock: Number(goodsData.stock) || 1,
-      sellerId: userInfoStore.info.id || goodsData.sellerId
+      sellerId: userInfoStore.info.id || goodsData.sellerId,
+      parentCategoryId: '',
+      categoryId: goodsData.categoryId || ''
+    }
+
+    // 回显分类层级
+    if (goodsModel.value.categoryId && parentCategorys.value.length > 0) {
+      for (const parent of parentCategorys.value) {
+        try {
+          const childRes = await shopCategoryChildListService(parent.id)
+          if (childRes.code === 0 && childRes.data.some(item => item.id === goodsModel.value.categoryId)) {
+            selectedParentId.value = parent.id
+            goodsModel.value.parentCategoryId = parent.id
+            await loadChildCategories(parent.id)
+            break
+          }
+        } catch (e) {
+          console.error('匹配分类失败:', e)
+        }
+      }
     }
 
     // 封面图处理
@@ -96,14 +152,12 @@ const getGoodsDetail = async () => {
     // 详情图处理
     if (goodsData.imageList && Array.isArray(goodsData.imageList)) {
       detailUrlList.value = goodsData.imageList.map(item => item.imageUrl)
-      // 构建el-upload需要的fileList格式
       detailFileList.value = goodsData.imageList.map((item, index) => ({
         uid: index + '_' + Date.now(),
         name: `detail_${index + 1}.jpg`,
         url: item.imageUrl,
         status: 'success'
       }))
-      // 同步到goodsModel的imageList
       goodsModel.value.imageList = goodsData.imageList.map((item, index) => ({
         ...item,
         sort: index + 1
@@ -114,21 +168,25 @@ const getGoodsDetail = async () => {
     await router.push('/trade/goods/list')
   } finally {
     pageLoading.value = false
+    // 关闭loading实例
+    if (loadingInstance) {
+      loadingInstance.close()
+      loadingInstance = null
+    }
   }
 }
 
-// 封面图选择回调（覆盖式）
+// 封面图上传
 const coverInput = ref(null)
 const handleCoverChange = async (file) => {
   if (!file) return
-  const maxSize = 5 * 1024 * 1024 // 5MB
+  const maxSize = 5 * 1024 * 1024
   if (file.size > maxSize) {
     ElMessage.warning('封面图大小不能超过5MB')
     return
   }
   coverFile.value = file
 
-  // 模拟上传（实际替换为你的上传接口）
   try {
     const formData = new FormData()
     formData.append('file', file)
@@ -157,7 +215,7 @@ const handleCoverRemove = () => {
   goodsModel.value.goodsPic = ''
 }
 
-// 详情图上传成功回调
+// 详情图上传成功
 const detailUploadSuccess = (response, uploadFile) => {
   const url = response.data.url
   uploadFile.url = url
@@ -176,22 +234,23 @@ const handleDetailRemove = (uploadFile) => {
   if (index !== -1) {
     detailUrlList.value.splice(index, 1)
     goodsModel.value.imageList.splice(index, 1)
-    // 重新排序
     goodsModel.value.imageList.forEach((item, idx) => {
       item.sort = idx + 1
     })
   }
 }
 
-// 图片上传失败回调
+// 上传失败
 const uploadError = () => {
   ElMessage.error('图片上传失败，请重试')
 }
 
-// 提交修改后的商品信息
+// 提交商品修改
 const submitGoods = async () => {
+  // 表单校验
   if (!goodsModel.value.goodsName) return ElMessage.warning('商品名称不能为空')
-  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择商品分类')
+  if (!goodsModel.value.parentCategoryId) return ElMessage.warning('请选择一级分类')
+  if (!goodsModel.value.categoryId) return ElMessage.warning('请选择二级分类')
   if (goodsModel.value.originalPrice < 0) return ElMessage.warning('原价不能为负数')
   if (!goodsModel.value.sellPrice || goodsModel.value.sellPrice <= 0) return ElMessage.warning('售卖价格必须大于0')
   if (goodsModel.value.isNew === null || goodsModel.value.isNew === undefined) return ElMessage.warning('请选择新旧程度')
@@ -200,6 +259,13 @@ const submitGoods = async () => {
   if (!goodsModel.value.goodsPic) return ElMessage.warning('请上传商品封面图')
 
   try {
+    // 创建提交loading
+    const submitLoading = ElLoading.service({
+      lock: true,
+      text: '保存中...',
+      background: 'rgba(0, 0, 0, 0.7)'
+    })
+
     const submitData = {
       ...goodsModel.value,
       originalPrice: Number(goodsModel.value.originalPrice),
@@ -211,33 +277,47 @@ const submitGoods = async () => {
     }
     await goodsUpdateService(submitData)
     ElMessage.success('商品修改成功')
+
+    // 关闭提交loading
+    submitLoading.close()
   } catch (error) {
     ElMessage.error('修改失败：' + (error.message || '服务器错误'))
   }
 }
 
-// 初始化页面数据
+// 初始化
 onMounted(async () => {
-  await getCategoryList()
+  await getCategoryTreeList()
   await getGoodsDetail()
-  pageLoading.value = false
 })
 
-// 监听路由参数变化（防止同页面刷新数据）
+// 监听路由变化
 watch(() => route.query.id, async (newId) => {
   if (newId) {
     await getGoodsDetail()
+  }
+})
+
+// 监听一级分类变化
+watch(() => selectedParentId.value, async (newVal) => {
+  goodsModel.value.parentCategoryId = newVal
+  await loadChildCategories(newVal)
+}, { immediate: false })
+
+// 组件卸载时关闭loading
+onUnmounted(() => {
+  if (loadingInstance) {
+    loadingInstance.close()
   }
 })
 </script>
 
 <template>
   <div class="goods-edit-container">
-    <!-- 页面加载中 -->
-    <div v-if="pageLoading" class="page-loading">
-      <el-loading fullscreen lock text="正在加载商品信息..."></el-loading>
+    <!-- ========== 修复：添加对应的v-if指令 ========== -->
+    <div v-if="pageLoading" class="page-loading-placeholder">
+      <!-- 空占位，loading通过JS控制，不在模板中显示 -->
     </div>
-
     <div v-else class="main-wrapper">
       <div class="main-layout">
         <div class="left-panel">
@@ -360,17 +440,45 @@ watch(() => route.query.id, async (newId) => {
             </div>
           </div>
 
+          <!-- 分类选择区域 -->
           <div class="form-block">
             <div class="block-title">所属商品类别</div>
-            <div class="category-tags-container">
-              <div
-                  v-for="c in categorys"
-                  :key="c.id"
-                  class="tag-item"
-                  :class="{ 'active': goodsModel.categoryId === c.id }"
-                  @click="goodsModel.categoryId = c.id"
-              >
-                {{ c.categoryName }}
+            <div class="category-select-container">
+              <!-- 一级分类选择 -->
+              <div class="category-level-wrapper">
+                <div class="level-title">一级分类</div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in parentCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': selectedParentId === c.id }"
+                      @click="selectedParentId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 二级分类选择 -->
+              <div class="category-level-wrapper" v-if="childCategorys.length > 0">
+                <div class="level-title">二级分类 <span class="required-tag">*</span></div>
+                <div class="category-tags-container">
+                  <div
+                      v-for="c in childCategorys"
+                      :key="c.id"
+                      class="tag-item"
+                      :class="{ 'active': goodsModel.categoryId === c.id }"
+                      @click="goodsModel.categoryId = c.id"
+                  >
+                    {{ c.categoryName }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 无二级分类提示 -->
+              <div class="no-child-tips" v-if="selectedParentId && childCategorys.length === 0">
+                该分类下暂无二级分类，请选择其他一级分类
               </div>
             </div>
           </div>
@@ -405,23 +513,20 @@ watch(() => route.query.id, async (newId) => {
 
 <style lang="scss" scoped>
 .goods-edit-container {
-  padding: 100px 200px;
+  padding: 20px;
   background-color: #fff;
   min-height: 100vh;
   box-sizing: border-box;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.05);  //边框阴影
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.05);
 }
 
-.page-loading {
+// 加载占位（空样式）
+.page-loading-placeholder {
   width: 100%;
-  height: 100vh;
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 9999;
+  height: 100%;
 }
 
-// 主包装器：限制最大宽度，居中显示
+// 主包装器
 .main-wrapper {
   max-width: 1400px;
   margin: 0 auto;
@@ -429,7 +534,7 @@ watch(() => route.query.id, async (newId) => {
   box-sizing: border-box;
 }
 
-// 主布局：响应式适配，小屏幕自动堆叠
+// 主布局
 .main-layout {
   display: flex;
   gap: 24px;
@@ -496,7 +601,7 @@ watch(() => route.query.id, async (newId) => {
   }
 }
 
-/* 价格组：原价 + 现价 */
+/* 价格组 */
 .price-group {
   display: flex;
   flex-direction: column;
@@ -557,7 +662,7 @@ watch(() => route.query.id, async (newId) => {
   }
 }
 
-/* 右侧面板 - 产品图同行排版样式 */
+/* 产品图样式 */
 .images-inline-container {
   display: flex;
   flex-wrap: wrap;
@@ -584,7 +689,7 @@ watch(() => route.query.id, async (newId) => {
   color: #666;
 }
 
-/* 封面图上传框 */
+/* 封面图 */
 .cover-img-box {
   width: 120px;
   height: 120px;
@@ -649,7 +754,7 @@ watch(() => route.query.id, async (newId) => {
   }
 }
 
-/* 详情图上传 */
+/* 详情图 */
 .detail-img-upload {
   display: flex;
   flex-wrap: wrap;
@@ -692,7 +797,34 @@ watch(() => route.query.id, async (newId) => {
   font-size: 24px;
 }
 
-/* 分类标签容器 */
+/* 分类选择样式 */
+.category-select-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.category-level-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.level-title {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+
+  .required-tag {
+    color: #f56c6c;
+    margin-left: 4px;
+  }
+}
+
 .category-tags-container {
   display: flex;
   gap: 8px;
@@ -709,12 +841,25 @@ watch(() => route.query.id, async (newId) => {
   color: #666;
   cursor: pointer;
   flex-shrink: 0;
+  transition: all 0.2s ease;
 
   &.active {
     background-color: #409eff;
     color: #fff;
     border-color: #409eff;
   }
+
+  &:hover:not(.active) {
+    border-color: #409eff;
+    color: #409eff;
+  }
+}
+
+.no-child-tips {
+  font-size: 12px;
+  color: #909399;
+  padding: 8px 0;
+  box-sizing: border-box;
 }
 
 /* 库存输入 */
@@ -730,7 +875,7 @@ watch(() => route.query.id, async (newId) => {
   }
 }
 
-/* 富文本编辑器容器 */
+/* 富文本编辑器 */
 .editor-container {
   width: 100%;
   max-width: 100%;

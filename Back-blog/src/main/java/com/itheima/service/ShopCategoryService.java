@@ -3,20 +3,33 @@ package com.itheima.service;
 import com.itheima.pojo.Category;
 
 import java.util.List;
+import java.util.Map;
 
+// 先完善Service接口（原缺失，补充）
 public interface ShopCategoryService {
-    //新增分类
     void add(Category category);
-    //列表查询
+
     List<Category> list();
-    //根据分类名称id查询分类信息
+
+    // 新增：查询一级分类
+    List<Category> listParentCategories();
+
+    // 新增：根据父ID查二级分类
+    List<Category> listChildCategoriesByParentId(Integer parentId);
+
     Category findById(Integer id);
-    //更新分类信息
+
     void update(Category category);
-    //删除分类信息
+
+    // 优化删除：先校验是否有子分类
     void delete(Integer id);
-    //获取管理员账户id为1的所有分类信息
+
     List<Category> controllerList();
-    //查询分类名称
+
     String findCategoryNameById(Integer id);
+
+    // 新增：树形结构查询（一级+二级分类组合）
+    List<Map<String, Object>> listCategoryTree();
+
+    Integer findParentIdByChildId(Integer childId);
 }

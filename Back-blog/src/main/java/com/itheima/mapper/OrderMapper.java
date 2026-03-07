@@ -3,10 +3,7 @@ package com.itheima.mapper;
 import com.itheima.DTO.OrderQueryDTO;
 import com.itheima.pojo.OrderInfo;
 import com.itheima.vo.OrderVO;
-import org.apache.ibatis.annotations.Insert;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -78,4 +75,9 @@ public interface OrderMapper {
                       @Param("refundRemark") String refundRemark,
                       @Param("refundTime") LocalDateTime refundTime,
                       @Param("updateTime") LocalDateTime updateTime);
+
+
+    // 8. 删除订单（仅删除订单信息，不删除商品信息）
+    @Delete("DELETE FROM order_info WHERE id = #{id}")
+    void deleteOrder(Integer id);
 }

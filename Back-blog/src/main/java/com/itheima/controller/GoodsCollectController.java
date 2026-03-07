@@ -67,4 +67,5 @@ public class GoodsCollectController {
         PageBean<GoodsVO> pageBean = goodsCollectService.myList(pageNum, pageSize, userId);
         return Result.success(pageBean);
     }
+
 }

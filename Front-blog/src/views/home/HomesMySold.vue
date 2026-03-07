@@ -9,7 +9,6 @@ import {
 } from "@/api/order.js";
 import useUserInfoStore from '@/stores/userInfo.js';
 import { userInfoServices } from '@/api/user.js';
-
 const route = useRoute();
 const router = useRouter();
 const userInfoStore = useUserInfoStore();
@@ -192,49 +191,51 @@ onMounted(async () => {
       />
     </el-tabs>
 
-    <!-- 订单列表卡片区域 -->
-    <div class="order-list" v-loading="loading">
-      <!-- 空状态 -->
-      <el-empty v-if="orderList.length === 0 && !loading" description="暂无订单记录" />
+    <!-- 订单列表卡片区域 - 新增内容容器 -->
+    <div class="content-wrapper">
+      <div class="order-list" v-loading="loading">
+        <!-- 空状态 -->
+        <el-empty v-if="orderList.length === 0 && !loading" description="暂无订单记录" />
 
-      <!-- 订单卡片循环 -->
-      <div class="order-card" v-for="order in orderList" :key="order.id">
-        <!-- 卡片头部：买家信息 + 订单状态 -->
-        <div class="order-card-header">
-          <div class="buyer-info">
-            <el-avatar :size="24" :src="order.buyerAvatar" v-if="order.buyerAvatar" />
-            <el-avatar :size="24" v-else>{{ order.buyerNickname?.charAt(0) || '买' }}</el-avatar>
-            <span class="buyer-name">{{ order.buyerNickname }}</span>
+        <!-- 订单卡片循环 -->
+        <div class="order-card" v-for="order in orderList" :key="order.id">
+          <!-- 卡片头部：买家信息 + 订单状态 -->
+          <div class="order-card-header">
+            <div class="buyer-info">
+              <el-avatar :size="24" :src="order.buyerAvatar" v-if="order.buyerAvatar" />
+              <el-avatar :size="24" v-else>{{ order.buyerNickname?.charAt(0) || '买' }}</el-avatar>
+              <span class="buyer-name">{{ order.buyerNickname }}</span>
+            </div>
+            <span class="order-status-text" :class="getStatusClass(order.orderStatus)">
+              {{ order.orderStatusName }}
+            </span>
           </div>
-          <span class="order-status-text" :class="getStatusClass(order.orderStatus)">
-            {{ order.orderStatusName }}
-          </span>
-        </div>
 
-        <!-- 商品信息区域 -->
-        <div class="goods-content" @click="showOrderDetail(order)">
-          <img :src="order.goodsPic" class="goods-cover" alt="商品图片" v-if="order.goodsPic" />
-          <div class="goods-info">
-            <p class="goods-name">{{ order.goodsName }}</p>
-            <p class="goods-price">¥{{ order.totalAmount }}</p>
+          <!-- 商品信息区域 -->
+          <div class="goods-content" @click="showOrderDetail(order)">
+            <img :src="order.goodsPic" class="goods-cover" alt="商品图片" v-if="order.goodsPic" />
+            <div class="goods-info">
+              <p class="goods-name">{{ order.goodsName }}</p>
+              <p class="goods-price">¥{{ order.totalAmount }}</p>
+            </div>
           </div>
-        </div>
 
-        <!-- 操作按钮区域 -->
-        <div class="order-action-bar">
-          <!-- 联系买家按钮 - 空置无功能 -->
-          <el-button size="small" class="action-btn">联系买家</el-button>
+          <!-- 操作按钮区域 -->
+          <div class="order-action-bar">
+            <!-- 联系买家按钮 - 空置无功能 -->
+            <el-button size="small" class="action-btn">联系买家</el-button>
 
-          <!-- 核心操作按钮 -->
-          <el-button size="small" class="action-btn primary" @click="showOrderDetail(order)">详情</el-button>
-          <el-button
-              size="small"
-              class="action-btn primary"
-              @click="handleShip(order)"
-              v-if="order.orderStatus === 2"
-          >
-            发货
-          </el-button>
+            <!-- 核心操作按钮 -->
+            <el-button size="small" class="action-btn primary" @click="showOrderDetail(order)">详情</el-button>
+            <el-button
+                size="small"
+                class="action-btn primary"
+                @click="handleShip(order)"
+                v-if="order.orderStatus === 2"
+            >
+              发货
+            </el-button>
+          </div>
         </div>
       </div>
     </div>
@@ -323,7 +324,18 @@ onMounted(async () => {
   min-height: 100vh;
   background-color: #f5f5f5;
   box-sizing: border-box;
-  padding-bottom: 40px;
+  // 核心修改：设置flex垂直布局
+  display: flex;
+  flex-direction: column;
+  // 移除底部padding，避免分页区域间距问题
+}
+
+// 新增内容容器样式
+.content-wrapper {
+  flex: 1; // 自动填充剩余空间
+  overflow-y: auto; // 内容超出时显示滚动条
+  padding: 0 12px 12px; // 保留左右内边距，底部内边距避免内容贴分页
+  margin-bottom: 8px; // 与分页区域保持间距
 }
 
 // 页面标题
@@ -370,7 +382,7 @@ onMounted(async () => {
 
 // 订单列表容器
 .order-list {
-  padding: 0 12px;
+  // 移除原有padding，移到content-wrapper中
 }
 
 // 订单卡片
@@ -510,14 +522,15 @@ onMounted(async () => {
   }
 }
 
-// 分页容器（与参考代码样式完全一致）
+// 分页容器（修改样式，固定在底部）
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
-  padding: 20px 20px 0;
+  padding: 12px 20px;
   background: #fff;
-  margin: 0 12px;
   border-radius: 8px;
+  // 确保在flex布局中靠底
+  margin-top: auto;
 }
 
 // 详情页样式（与参考代码样式完全一致）

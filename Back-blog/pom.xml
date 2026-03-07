@@ -39,13 +39,6 @@
             <artifactId>mybatis-spring-boot-starter</artifactId>
             <version>3.0.4</version>
         </dependency>
-        
-        <!-- MyBatis-Plus 依赖 -->
-        <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
-            <version>3.5.7</version>
-        </dependency>
 
         <dependency>
             <groupId>com.mysql</groupId>
@@ -210,6 +203,20 @@
             <artifactId>fastjson</artifactId>
             <version>2.0.43</version>
         </dependency>
+
+        <dependency>
+            <groupId>io.milvus</groupId>
+            <artifactId>milvus-sdk-java</artifactId>
+            <version>2.4.4</version>
+        </dependency>
+
+        <!-- 可选但建议加：解决 Windows 下的依赖兼容问题 -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.25.3</version>
+        </dependency>
+
     </dependencies>
 
     <build>

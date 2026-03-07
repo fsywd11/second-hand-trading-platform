@@ -30,6 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
             "/goods/findSellerByUserId/{id}",
             "/comment/commentallList/{userId}",
             "/swagger-ui/**",
+            "/goods/rag/search",
             "/v3/api-docs/**",
             "/swagger-resources/**",
             "/webjars/**"

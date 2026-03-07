@@ -99,4 +99,13 @@ public class OrderController {
         orderService.handleRefund(refundHandleDTO);
         return Result.success("退款处理完成");
     }
+
+    //删除订单
+    @PreAuthorize("/order/delete")
+    @DeleteMapping("/delete/{id}")
+    @Operation(summary = "删除订单", description = "删除订单")
+    public Result deleteOrder(@PathVariable Integer id) {
+        orderService.deleteOrder(id);
+        return Result.success("删除订单成功");
+    }
 }

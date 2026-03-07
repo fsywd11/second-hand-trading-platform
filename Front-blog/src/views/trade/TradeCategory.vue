@@ -1,19 +1,20 @@
 <script setup lang="js">
 import { Edit, Delete, Plus, Refresh, Search } from '@element-plus/icons-vue'
-import { ref, watch, onMounted } from 'vue'
-// 1. 替换API导入 - 使用商品分类接口
+import { ref, watch, onMounted} from 'vue'
+// 替换API导入 - 适配新的层级分类接口
 import {
   shopCategoryAddService,
-  shopCategoryListService,
+  shopCategoryAdminListService, // 替换原list接口
+  shopCategoryParentListService, // 新增：查询一级分类（父分类）
   shopCategoryUpdateService,
   shopCategoryDeleteService
 } from '@/api/shopcategory.js'
 import { ElMessage, ElMessageBox } from "element-plus"
 
 // --- 数据定义 ---
-// 2. 变量命名适配 - 从article改为category（保持语义）
-const categorys = ref([])
-const filteredCategorys = ref([])
+const categorys = ref([]) // 全部分类列表
+const filteredCategorys = ref([]) // 过滤后的分类列表
+const parentCategorys = ref([]) // 一级分类列表（父分类选项）
 const selectedIds = ref([])
 const isAllSelected = ref(false)
 const isIndeterminate = ref(false)
@@ -21,32 +22,48 @@ const tableKey = ref(0)
 const loading = ref(false)
 const searchKeyword = ref('')
 
-// 获取列表数据 - 替换接口调用函数
+// 格式化分类数据：给二级分类添加父分类名称，方便表格展示
+const formatCategoryData = (list) => {
+  return list.map(item => {
+    // 找到父分类名称（parentId=0为一级分类，无父分类）
+    const parent = parentCategorys.value.find(p => p.id === item.parentId)
+    return {
+      ...item,
+      parentCategoryName: parent ? parent.categoryName : '无' // 父分类名称
+    }
+  })
+}
+
+// 获取全部分类列表（管理员）
 const getShopCategoryList = async () => {
   loading.value = true
   try {
-    let result = await shopCategoryListService()
-    categorys.value = result.data || []
+    // 1. 先获取一级分类（父分类选项）
+    const parentRes = await shopCategoryParentListService()
+    parentCategorys.value = parentRes.data || []
+
+    // 2. 获取全部分类列表
+    let result = await shopCategoryAdminListService()
+    categorys.value = formatCategoryData(result.data || [])
     selectedIds.value = []
     updateSelectionStatus()
   } catch (error) {
-    // 3. 提示文本适配 - 改为商品分类
     ElMessage.error('获取商品分类列表失败')
   } finally {
     loading.value = false
   }
 }
 
-// 搜索过滤逻辑 - 保持原有逻辑（字段名如果后端一致则无需修改）
+// 搜索过滤逻辑 - 新增父分类名称过滤
 watch([searchKeyword, categorys], () => {
   if (!searchKeyword.value) {
     filteredCategorys.value = categorys.value
   } else {
     const keyword = searchKeyword.value.toLowerCase()
     filteredCategorys.value = categorys.value.filter(item =>
-        // 注意：如果商品分类接口返回的字段名不是categoryName/categoryAlias，需要对应修改
         item.categoryName?.toLowerCase().includes(keyword) ||
-        item.categoryAlias?.toLowerCase().includes(keyword)
+        item.categoryAlias?.toLowerCase().includes(keyword) ||
+        item.parentCategoryName?.toLowerCase().includes(keyword)
     )
   }
 }, { immediate: true })
@@ -59,8 +76,13 @@ onMounted(() => {
 const dialogVisible = ref(false)
 const title = ref('')
 const categoryFormRef = ref(null)
-// 表单模型 - 保持字段名（根据后端实际接收字段调整）
-const categoryModel = ref({ categoryName: '', categoryAlias: '' })
+// 表单模型 - 新增parentId字段（父分类ID）
+const categoryModel = ref({
+  id: '',
+  categoryName: '',
+  categoryAlias: '',
+  parentId: 0 // 默认0（一级分类）
+})
 
 // 表单验证规则 - 保持原有规则
 const rules = {
@@ -74,32 +96,51 @@ const rules = {
   ]
 }
 
+// 打开弹窗：区分添加/编辑，处理父分类回显
 const showDialog = (row) => {
-  title.value = '修改商品分类'
-  dialogVisible.value = true
-  categoryModel.value = { ...row }
+  if (row) {
+    // 编辑模式：回显数据（含父分类ID）
+    title.value = '修改商品分类'
+    dialogVisible.value = true
+    categoryModel.value = {
+      id: row.id,
+      categoryName: row.categoryName,
+      categoryAlias: row.categoryAlias,
+      parentId: row.parentId || 0
+    }
+  } else {
+    // 添加模式：默认一级分类
+    title.value = '添加商品分类'
+    dialogVisible.value = true
+    clearData()
+  }
 }
 
+// 清空表单数据
 const clearData = () => {
-  categoryModel.value = { categoryName: '', categoryAlias: '' }
+  categoryModel.value = {
+    id: '',
+    categoryName: '',
+    categoryAlias: '',
+    parentId: 0
+  }
   if (categoryFormRef.value) categoryFormRef.value.resetFields()
 }
 
-// 保存/更新 - 替换接口调用函数
+// 保存/更新分类
 const saveCategory = async () => {
   if (!categoryFormRef.value) return
   await categoryFormRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
       try {
-        const service = title.value === '添加商品分类' ? shopCategoryAddService : shopCategoryUpdateService
+        const service = title.value === '修改商品分类' ? shopCategoryUpdateService : shopCategoryAddService
         await service(categoryModel.value)
         ElMessage.success(`${title.value}成功`)
-        getShopCategoryList()
+        await getShopCategoryList() // 重新加载列表
         dialogVisible.value = false
       } catch (error) {
-        // 增加错误提示
-        ElMessage.error(`${title.value}失败：${error.message || '服务器错误'}`)
+        ElMessage.error(`${title.value}失败：${error.response?.data?.msg || '服务器错误'}`)
       } finally {
         loading.value = false
       }
@@ -107,8 +148,15 @@ const saveCategory = async () => {
   })
 }
 
-// --- 删除逻辑 ---
+// --- 删除逻辑：新增子分类校验提示 ---
 const deleteCategory = (row) => {
+  // 检查当前分类是否有子分类
+  const hasChildren = categorys.value.some(item => item.parentId === row.id)
+  if (hasChildren) {
+    ElMessage.warning(`无法删除「${row.categoryName}」：该分类下存在子分类，请先删除子分类`)
+    return
+  }
+
   ElMessageBox.confirm(`确定删除「${row.categoryName}」吗？`, '警告', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
@@ -118,9 +166,9 @@ const deleteCategory = (row) => {
     try {
       await shopCategoryDeleteService(row.id)
       ElMessage.success('删除成功')
-      getShopCategoryList()
+      await getShopCategoryList()
     } catch (error) {
-      ElMessage.error('删除失败：' + (error.message || '服务器错误'))
+      ElMessage.error('删除失败：' + (error.response?.data?.msg || '服务器错误'))
     } finally {
       loading.value = false
     }
@@ -129,7 +177,17 @@ const deleteCategory = (row) => {
   })
 }
 
+// 批量删除（新增子分类校验）
 const batchDeleteCategories = async () => {
+  // 检查选中的分类是否有子分类
+  const hasChildrenCategory = selectedIds.value.some(id => {
+    return categorys.value.some(item => item.parentId === id)
+  })
+  if (hasChildrenCategory) {
+    ElMessage.warning('无法批量删除：部分选中的分类下存在子分类，请先删除子分类')
+    return
+  }
+
   ElMessageBox.confirm(`确认删除选中的 ${selectedIds.value.length} 个商品分类？`, '批量删除', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
@@ -137,14 +195,13 @@ const batchDeleteCategories = async () => {
   }).then(async () => {
     loading.value = true
     try {
-      // 实际项目中建议后端提供批量删除接口，此处循环调用
       for (const id of selectedIds.value) {
         await shopCategoryDeleteService(id)
       }
       ElMessage.success('批量删除成功')
-      getShopCategoryList()
+      await getShopCategoryList()
     } catch (error) {
-      ElMessage.error('批量删除失败：' + (error.message || '服务器错误'))
+      ElMessage.error('批量删除失败：' + (error.response?.data?.msg || '服务器错误'))
     } finally {
       loading.value = false
     }
@@ -177,8 +234,21 @@ const handleSelectionChange = (row, checked) => {
 
 const handleAllSelectionChange = (checked) => {
   selectedIds.value = checked ? filteredCategorys.value.map(item => item.id) : []
-  tableKey.value++ // 强制刷新表格以同步 Checkbox 状态
+  tableKey.value++
   updateSelectionStatus()
+}
+
+// 快捷添加子分类：基于选中的一级分类快速创建子类
+const addChildCategory = (parentRow) => {
+  title.value = '添加子分类'
+  dialogVisible.value = true
+  clearData()
+  categoryModel.value = {
+    id: '',
+    categoryName: '',
+    categoryAlias: '',
+    parentId: parentRow.id
+  }
 }
 </script>
 
@@ -186,15 +256,14 @@ const handleAllSelectionChange = (checked) => {
   <el-card class="page-container">
     <template #header>
       <div class="header">
-        <!-- 4. UI文本替换 - 文章分类 → 商品分类 -->
         <span class="title-text">商品分类管理</span>
         <div class="header-actions">
-          <el-input v-model="searchKeyword" placeholder="搜索名称或别名..." :prefix-icon="Search" clearable style="width: 220px" />
+          <el-input v-model="searchKeyword" placeholder="搜索名称/别名/父分类..." :prefix-icon="Search" clearable style="width: 220px" />
           <el-button type="danger" :icon="Delete" @click="batchDeleteCategories" :disabled="selectedIds.length === 0">
             批量删除 ({{ selectedIds.length }})
           </el-button>
           <el-button :icon="Refresh" @click="getShopCategoryList" :loading="loading" circle />
-          <el-button type="primary" :icon="Plus" @click="dialogVisible = true; title='添加商品分类'; clearData()">添加商品分类</el-button>
+          <el-button type="primary" :icon="Plus" @click="showDialog()">添加商品分类</el-button>
         </div>
       </div>
     </template>
@@ -220,16 +289,37 @@ const handleAllSelectionChange = (checked) => {
 
         <el-table-column label="序号" width="80" type="index" align="center" />
 
-        <el-table-column label="分类名称" prop="categoryName" min-width="150" align="center" show-overflow-tooltip />
+        <!-- 分类名称：区分一级/二级，添加层级标识 -->
+        <el-table-column label="分类名称" prop="categoryName" min-width="180" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="category-name-wrapper">
+              <!-- 二级分类添加缩进和标识 -->
+              <span v-if="row.parentId !== 0" class="level-tag">└─ 子分类：</span>
+              {{ row.categoryName }}
+            </div>
+          </template>
+        </el-table-column>
 
         <el-table-column label="分类别名" prop="categoryAlias" min-width="150" align="center" show-overflow-tooltip />
 
-        <el-table-column label="创建时间" prop="createTime" width="200" align="center" />
+        <!-- 新增：父分类列 -->
+        <el-table-column label="父分类" prop="parentCategoryName" min-width="150" align="center" show-overflow-tooltip />
 
-        <el-table-column label="操作" width="160" fixed="right" align="center">
+        <el-table-column label="创建时间" prop="createTime" width="200" align="center">
           <template #default="{ row }">
-            <el-button :icon="Edit" type="primary" link @click="showDialog(row)">编辑</el-button>
-            <el-button :icon="Delete" type="danger" link @click="deleteCategory(row)">删除</el-button>
+            {{ row.createTime || '-' }}
+          </template>
+        </el-table-column>
+
+        <!-- 操作列：调整宽度确保按钮同行显示 -->
+        <el-table-column label="操作" width="280" fixed="right" align="center">
+          <template #default="{ row }">
+            <div class="operation-btn-group">
+              <el-button :icon="Edit" type="primary" link @click="showDialog(row)">编辑</el-button>
+              <!-- 仅一级分类显示“添加子分类” -->
+              <el-button v-if="row.parentId === 0" type="success" link @click="addChildCategory(row)">添加子分类</el-button>
+              <el-button :icon="Delete" type="danger" link @click="deleteCategory(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
 
@@ -246,6 +336,7 @@ const handleAllSelectionChange = (checked) => {
       </div>
     </div>
 
+    <!-- 弹窗：新增父分类选择器 -->
     <el-dialog v-model="dialogVisible" :title="title" width="420px" destroy-on-close>
       <el-form ref="categoryFormRef" :model="categoryModel" :rules="rules" label-width="80px" style="padding-right: 20px">
         <el-form-item label="分类名称" prop="categoryName">
@@ -253,6 +344,19 @@ const handleAllSelectionChange = (checked) => {
         </el-form-item>
         <el-form-item label="分类别名" prop="categoryAlias">
           <el-input v-model="categoryModel.categoryAlias" maxlength="15" show-word-limit placeholder="请输入分类别名" />
+        </el-form-item>
+        <!-- 新增：父分类选择器 -->
+        <el-form-item label="父分类">
+          <el-select v-model="categoryModel.parentId" placeholder="请选择父分类（默认一级分类）">
+            <el-option label="无（一级分类）" value="0" />
+            <el-option
+                v-for="parent in parentCategorys"
+                :key="parent.id"
+                :label="parent.categoryName"
+                :value="parent.id"
+            />
+          </el-select>
+          <div class="form-tip">选择父分类则为二级分类，不选则为一级分类</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -323,5 +427,37 @@ const handleAllSelectionChange = (checked) => {
   background-color: #fafafa;
   color: #333;
   font-weight: bold;
+}
+
+/* 分类名称层级样式 - 新增水平居中 */
+.category-name-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center; /* 新增：让分类名称水平居中 */
+  .level-tag {
+    color: #909399;
+    margin-right: 4px;
+    font-size: 12px;
+  }
+}
+
+/* 操作按钮组样式 - 确保按钮同行显示 */
+.operation-btn-group {
+  display: flex;
+  justify-content: center; /* 按钮组整体居中 */
+  gap: 8px; /* 按钮之间的间距 */
+  flex-wrap: nowrap; /* 禁止换行 */
+
+  :deep(.el-button) {
+    white-space: nowrap; /* 按钮文字不换行 */
+    padding: 0 8px; /* 微调按钮内边距，节省空间 */
+  }
+}
+
+/* 表单提示文字 */
+.form-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
 }
 </style>

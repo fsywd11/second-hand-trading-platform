@@ -16,11 +16,25 @@ const queryParams = ref({
   keyword: ''       // 搜索关键词
 })
 
-// 分类列表
-const categories = computed(() => goodsStore.categories)
+// 分类列表中显示父id为0的数据
+const categories = computed(() => goodsStore.categories.filter(item => item.parentId === 0))
 const goodsList = computed(() => goodsStore.goodsList)
 const total = computed(() => goodsStore.total)
 const isLoading = computed(() => goodsStore.isLoading)
+// 新增：当前激活的标签
+const activeTab = computed({
+  get() {
+    // 如果有选中的分类ID，返回对应分类名称，否则返回"猜你喜欢"
+    if (queryParams.value.categoryId) {
+      const activeCategory = goodsStore.categories.find(item => item.id === queryParams.value.categoryId)
+      return activeCategory ? activeCategory.categoryName : '猜你喜欢'
+    }
+    return '猜你喜欢'
+  },
+  set(val) {
+    // 仅用于模板绑定，实际筛选逻辑在handleCategoryChange中处理
+  }
+})
 
 // 初始化加载
 onMounted(async () => {
@@ -55,45 +69,288 @@ const goToDetail = (id) => {
 const formatPrice = (price) => {
   return Number(price).toFixed(1)
 }
+
+// 新增：处理标签栏的分类点击（清空分类筛选）
+const handleGuessLikeClick = () => {
+  queryParams.value.categoryId = null
+  queryParams.value.pageNum = 1
+  fetchGoods()
+}
+
+// 新增：处理左侧细分类目的点击事件
+const handleCategoryItemClick = async (keyword) => {
+  await router.push({
+    path: '/homes/search',
+    query: { keyword: keyword } // URL参数：/homes/search?keyword=xxx
+  });
+}
+
+// 静态左侧分类数据（拆分更细，支持点击）
+const staticCategories = ref([
+  {
+    icon: '📱',
+    name: '手机 / 数码 / 电脑',
+    subItems: [
+      { name: '手机', keyword: '手机' },
+      { name: '数码', keyword: '数码' },
+      { name: '电脑', keyword: '电脑' }
+    ]
+  },
+  {
+    icon: '👕',
+    name: '服饰 / 箱包 / 运动',
+    subItems: [
+      { name: '服饰', keyword: '服饰' },
+      { name: '箱包', keyword: '箱包' },
+      { name: '运动', keyword: '运动' }
+    ]
+  },
+  {
+    icon: '🎮',
+    name: '技能 / 卡券 / 潮玩',
+    subItems: [
+      { name: '技能', keyword: '技能' },
+      { name: '卡券', keyword: '卡券' },
+      { name: '潮玩', keyword: '潮玩' }
+    ]
+  },
+  {
+    icon: '👶',
+    name: '母婴 / 美妆 / 个护',
+    subItems: [
+      { name: '母婴', keyword: '母婴' },
+      { name: '美妆', keyword: '美妆' },
+      { name: '个护', keyword: '个护' }
+    ]
+  },
+  {
+    icon: '🏠',
+    name: '家具 / 家电 / 家装',
+    subItems: [
+      { name: '家具', keyword: '家具' },
+      { name: '家电', keyword: '家电' },
+      { name: '家装', keyword: '家装' }
+    ]
+  },
+  {
+    icon: '💎',
+    name: '文玩 / 珠宝 / 礼品',
+    subItems: [
+      { name: '文玩', keyword: '文玩' },
+      { name: '珠宝', keyword: '珠宝' },
+      { name: '礼品', keyword: '礼品' }
+    ]
+  },
+  {
+    icon: '🍔',
+    name: '食品 / 宠物 / 花卉',
+    subItems: [
+      { name: '食品', keyword: '食品' },
+      { name: '宠物', keyword: '宠物' },
+      { name: '花卉', keyword: '花卉' }
+    ]
+  },
+  {
+    icon: '📚',
+    name: '图书 / 游戏 / 音像',
+    subItems: [
+      { name: '图书', keyword: '图书' },
+      { name: '游戏', keyword: '游戏' },
+      { name: '音像', keyword: '音像' }
+    ]
+  },
+  {
+    icon: '🚗',
+    name: '汽车 / 电动车 / 租房',
+    subItems: [
+      { name: '汽车', keyword: '汽车' },
+      { name: '电动车', keyword: '电动车' },
+      { name: '租房', keyword: '租房' }
+    ]
+  },
+  {
+    icon: '🔧',
+    name: '五金 / 设备 / 农牧',
+    subItems: [
+      { name: '五金', keyword: '五金' },
+      { name: '设备', keyword: '设备' },
+      { name: '农牧', keyword: '农牧' }
+    ]
+  }
+])
+
+// 推荐模块数据（与图片一致）
+const moduleData = ref([
+  {
+    title: '衣橱捡漏',
+    subtitle: '时尚美衣低价淘',
+    color: 'yellow',
+    items: [
+      { id: 1, image: 'https://via.placeholder.com/120', price: 36 },
+      { id: 2, image: 'https://via.placeholder.com/120', price: 20 },
+      { id: 3, image: 'https://via.placeholder.com/120', price: 129 }
+    ]
+  },
+  {
+    title: '手机数码',
+    subtitle: '热门装备省心入',
+    color: 'blue',
+    items: [
+      { id: 1, image: 'https://via.placeholder.com/120', price: 225 },
+      { id: 2, image: 'https://via.placeholder.com/120', price: 78 },
+      { id: 3, image: 'https://via.placeholder.com/120', price: 280 }
+    ]
+  },
+  {
+    title: '二次元',
+    subtitle: '烫门新品随手入',
+    color: 'green',
+    items: [
+      { id: 1, image: 'https://via.placeholder.com/120', price: 90 },
+      { id: 2, image: 'https://via.placeholder.com/120', price: 30 },
+      { id: 3, image: 'https://via.placeholder.com/120', price: 18 }
+    ]
+  },
+  {
+    title: '省钱卡券',
+    subtitle: '吃喝玩乐放心购',
+    color: 'pink',
+    items: [
+      { id: 1, image: 'https://via.placeholder.com/120', price: 12 },
+      { id: 2, image: 'https://via.placeholder.com/120', price: 1.5 },
+      { id: 3, image: 'https://via.placeholder.com/120', price: 28 }
+    ]
+  }
+])
 </script>
 
 <template>
   <div class="page-layout">
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <!-- 第一大模块：分类 + 轮播 + 推荐模块 -->
+      <div class="top-module">
+        <!-- 左侧静态分类菜单（支持细分类目点击） -->
+        <aside class="sidebar">
+          <ul class="category-menu">
+            <li
+                v-for="(cat, index) in staticCategories"
+                :key="index"
+                class="static-category-item"
+            >
+              <span class="icon">{{ cat.icon }}</span>
+              <div class="category-content">
+                <div class="sub-items">
+                  <span
+                      v-for="(subItem, subIndex) in cat.subItems"
+                      :key="subIndex"
+                      class="main-name"
+                      @click.stop="handleCategoryItemClick(subItem.keyword)"
+                  >
+                    {{ subItem.name }}
+                    <span v-if="subIndex !== cat.subItems.length - 1">/</span>
+                  </span>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </aside>
 
-    <div class="main-content">
-      <div class="goods-list-page">
-        <div class="filter-section">
-          <h2 class="filter-title">筛选商品</h2>
+        <!-- 右侧轮播 + 推荐模块 -->
+        <div class="top-right-content">
+          <!-- 顶部轮播/活动区 -->
+          <div class="banner-section">
+            <div class="banner-item orange">
+              <div class="banner-content">
+                <div class="banner-text">
+                  <h2>校园抄底好物</h2>
+                  <p>超绝性价比 <span class="highlight">1</span> 省到底</p>
+                </div>
+                <div class="banner-character">
 
-          <div class="filter-item">
-            <span class="filter-label">商品类别：</span>
-            <div class="category-btn-group">
-              <el-button
-                  :type="queryParams.categoryId === null ? 'primary' : 'default'"
-                  size="small"
-                  @click="handleCategoryChange(null)"
-                  class="category-btn"
-              >
-                全部
-              </el-button>
+                </div>
+                <el-button type="primary" size="small" class="banner-button">去看看 ></el-button>
+              </div>
+            </div>
+          </div>
 
-              <el-button
-                  v-for="cat in categories"
-                  :key="cat.id"
-                  :type="queryParams.categoryId === cat.id ? 'primary' : 'default'"
-                  size="small"
-                  @click="handleCategoryChange(cat.id)"
-                  class="category-btn"
-              >
-                {{ cat.categoryName }}
-              </el-button>
+          <!-- 推荐模块区 -->
+          <div class="module-section">
+            <div
+                class="module-card"
+                :class="module.color"
+                v-for="(module, idx) in moduleData"
+                :key="idx"
+            >
+              <div class="module-header">
+                <div class="module-title-wrapper">
+                  <h3 class="module-title">{{ module.title }} <span class="arrow">➤</span></h3>
+                  <span class="module-subtitle">{{ module.subtitle }}</span>
+                </div>
+                <div class="module-icon">
+                  <span class="icon" v-if="module.color === 'yellow'">👟</span>
+                  <span class="icon" v-else-if="module.color === 'blue'">📸</span>
+                  <span class="icon" v-else-if="module.color === 'green'">🦆</span>
+                  <span class="icon" v-else-if="module.color === 'pink'">👝</span>
+                </div>
+              </div>
+              <div class="module-items">
+                <div class="module-item" v-for="item in module.items" :key="item.id">
+                  <img :src="item.image" :alt="`商品${item.id}`" />
+                  <span class="price">¥{{ formatPrice(item.price) }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
+      <!-- 第二大模块：猜你喜欢 + 商品列表 -->
+      <div class="bottom-module">
+        <!-- 猜你喜欢标签栏 - 核心修改部分 -->
+        <div class="tab-section">
+          <!-- 猜你喜欢标签 -->
+          <div
+              :class="{ active: activeTab === '猜你喜欢' }"
+              class="tab-item"
+              @click="handleGuessLikeClick"
+          >
+            猜你喜欢
+          </div>
+          <!-- 动态渲染分类标签 -->
+          <div
+              v-for="cat in categories"
+              :key="`tab-${cat.id}`"
+              :class="{ active: activeTab === cat.categoryName }"
+              class="tab-item"
+              @click="handleCategoryChange(cat.id)"
+          >
+            {{ cat.categoryName }}
+          </div>
+        </div>
+
+        <!-- 商品列表 -->
         <div class="goods-container">
-          <el-skeleton v-show="isLoading" :rows="3" :items="4" />
+          <!-- 自定义商品骨架屏 -->
+          <div class="goods-grid skeleton-grid" v-show="isLoading">
+            <div class="goods-card skeleton-card" v-for="i in 8" :key="i">
+              <div class="goods-image-wrapper skeleton-image"></div>
+              <div class="goods-info">
+                <h3 class="goods-name skeleton-name"></h3>
+                <div class="goods-price skeleton-price"></div>
+                <div class="goods-meta">
+                  <span class="stock skeleton-meta-item"></span>
+                  <span class="like-count skeleton-meta-item"></span>
+                </div>
+                <div class="seller-info">
+                  <div class="skeleton-avatar"></div>
+                  <span class="seller-name skeleton-seller-name"></span>
+                </div>
+              </div>
+            </div>
+          </div>
 
+          <!-- 实际商品列表 -->
           <div class="goods-grid" v-show="!isLoading">
             <div
                 class="goods-card"
@@ -132,165 +389,561 @@ const formatPrice = (price) => {
           />
         </div>
       </div>
-    </div>
+    </main>
 
+    <!-- 底部 -->
     <div class="footer-wrapper">
       <Footer />
     </div>
-
   </div>
 </template>
 
 <style lang="scss" scoped>
-/* ================= 新增布局控制 ================= */
+/* 全局布局 */
 .page-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100vh; /* 页面最小高度为100%视口高度 */
+  min-height: 100vh;
+  padding-top: 50px;
+  background-color: #f5f5f5;
 }
 
-.main-content {
-  flex: 1; /* 无数据时自动拉伸，将底部区域挤到下方 */
-  display: flex;
-  flex-direction: column;
-}
+/* 顶部导航栏 */
+.top-nav {
+  background-color: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 
-.footer-wrapper {
-  width: 100%;
-  flex-shrink: 0; /* 确保底部不会被挤压变形 */
-}
-/* ================================================ */
-
-/* 以下为你原本的样式，完全保持原样，不破坏原有效果 */
-.goods-list-page {
-  max-width: 1200px;
-  width: 100%;
-  margin: 30px auto;
-  padding-top: 70px;
-}
-
-.filter-section {
-  margin-bottom: 24px;
-
-  .filter-title {
-    font-size: 30px;
-    font-weight: bold;
-    margin-bottom: 16px;
+  .nav-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
   }
 
-  .filter-item {
+  .nav-left {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 20px;
 
-    .filter-label {
-      font-size: 14px;
-      color: #666;
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      color: #ff6a00;
+      text-shadow: 0 1px 2px rgba(255, 106, 0, 0.2);
     }
 
-    .category-btn-group {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .category-btn {
-      border-radius: 20px !important;
-      padding: 4px 16px !important;
-      transition: all 0.2s ease !important;
-
-      &.el-button--primary {
-        background-color: #409eff !important;
-        border-color: #409eff !important;
-        color: #fff !important;
-
+    .search-input {
+      width: 400px;
+      :deep(.el-input__wrapper) {
+        border-radius: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        transition: all 0.3s ease;
         &:hover {
-          background-color: #66b1ff !important;
-          border-color: #66b1ff !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
       }
-
-      &.el-button--default {
-        background-color: #f5f7fa !important;
-        border-color: #e4e7ed !important;
-        color: #606266 !important;
-
+      :deep(.el-input__inner) {
+        padding-left: 16px;
+      }
+      :deep(.el-input-group__append) {
+        border-radius: 0 24px 24px 0;
+        background-color: #ff6a00;
+        color: #fff;
+        border-color: #ff6a00;
         &:hover {
-          background-color: #e4e7ed !important;
-          border-color: #dcdfe6 !important;
-          color: #303133 !important;
+          background-color: #ff8533;
+          border-color: #ff8533;
+        }
+      }
+    }
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    .el-button {
+      border-radius: 20px;
+      padding: 8px 18px;
+      font-weight: 500;
+    }
+  }
+}
+
+/* 主内容区 */
+.main-content {
+  flex: 1;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 第一大模块：分类 + 轮播 + 推荐模块 */
+.top-module {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  background-color: #ffffff;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  /* 核心修改：固定高度 */
+  height: 368px;
+  box-sizing: border-box;
+  align-items: stretch;
+}
+
+/* 左侧分类菜单 */
+.sidebar {
+  width: 180px;
+  background-color: #f6f6f6;
+  border-radius: 12px;
+  padding: 0;
+  /* 适配固定高度 */
+  height: 100%;
+  overflow-y: auto;
+
+  .category-menu {
+    list-style: none;
+
+    margin: 0;
+    height: 100%;
+    box-sizing: border-box;
+
+    .static-category-item {
+      padding: 5px 12px;
+      font-size: 13px;
+      color: #333;
+      border-radius: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+
+      .icon {
+        width: 18px;
+        text-align: center;
+        margin-top: 1px;
+        flex-shrink: 0;
+      }
+
+      .category-content {
+        flex: 1;
+
+        .main-name {
+          display: block;
+          margin-bottom: 4px;
+          cursor: default;
+          &:hover {
+            color: #f58c14;
+            cursor: pointer;
+          }
+        }
+
+        .sub-items {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 3px;
+
+          .sub-item {
+            padding: 1px 4px;
+            background-color: #e8e8e8;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+
+            &:hover {
+              background-color: #ff6a00;
+              color: #fff;
+            }
+          }
         }
       }
     }
   }
 }
 
+/* 右侧轮播 + 推荐模块 */
+.top-right-content {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  height: 100%;
+}
+
+/* 顶部轮播/活动区 */
+.banner-section {
+  width: 280px;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  .banner-item {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 24px;
+    font-weight: bold;
+    background-size: cover;
+    background: linear-gradient(135deg, #ff9a00, #ff6a00) center;
+
+    &.orange {
+      background: linear-gradient(135deg, #ff9a00, #ff6a00);
+    }
+
+    .banner-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      box-sizing: border-box;
+
+      .banner-text {
+        h2 {
+          font-size: 22px;
+          margin-bottom: 6px;
+          font-weight: 700;
+          line-height: 1.2;
+        }
+
+        p {
+          font-size: 14px;
+          margin-bottom: 0;
+          opacity: 0.9;
+
+          .highlight {
+            display: inline-block;
+            background-color: #fff;
+            color: #ff6a00;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            font-weight: bold;
+            text-shadow: none;
+            font-size: 14px;
+          }
+        }
+      }
+
+      .banner-character {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        margin: 10px 0;
+
+        .character-icon {
+          width: 60px;
+          height: 60px;
+          background-color: #fff;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #ff6a00;
+          font-size: 30px;
+        }
+
+        .food-icon {
+          width: 45px;
+          height: 45px;
+          background-color: #fff;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #ff6a00;
+          font-size: 22px;
+        }
+      }
+
+      .banner-button {
+        border-radius: 20px;
+        padding: 8px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        background-color: #fff;
+        color: #ff6a00;
+        border: none;
+        width: 100%;
+        &:hover {
+          background-color: #fff3e6;
+          box-shadow: 0 4px 12px rgba(255, 106, 0, 0.3);
+        }
+      }
+    }
+  }
+}
+
+/* 推荐模块区 */
+.module-section {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 12px;
+  flex: 1;
+  height: 100%;
+
+  .module-card {
+    border-radius: 12px;
+    padding: 12px;
+    color: #333;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+    &:hover {
+      transform: translateY(-2px);
+    }
+
+    .module-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+
+      .module-title-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+
+        .module-title {
+          font-size: 15px;
+          font-weight: 700;
+          margin: 0;
+          display: flex;
+          align-items: center;
+
+          .arrow {
+            font-size: 10px;
+            margin-left: 4px;
+            color: #999;
+          }
+        }
+
+        .module-subtitle {
+          font-size: 11px;
+          color: #666;
+        }
+      }
+
+      .module-icon {
+        width: 40px;
+        height: 40px;
+        background-color: #fff;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+      }
+    }
+
+    .module-items {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      flex: 1;
+      &::-webkit-scrollbar {
+        height: 3px;
+      }
+      &::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.1);
+        border-radius: 2px;
+      }
+
+      .module-item {
+        flex-shrink: 0;
+        width: 80px;
+        text-align: center;
+        transition: all 0.2s ease;
+        &:hover {
+          transform: scale(1.05);
+        }
+
+        img {
+          width: 80px;
+          height: 80px;
+          object-fit: cover;
+          border-radius: 8px;
+          margin-bottom: 4px;
+        }
+
+        .price {
+          font-size: 12px;
+          color: #ff4d4f;
+          font-weight: bold;
+        }
+      }
+    }
+
+    &.yellow {
+      background-color: #fff9e6;
+      border: 2px solid #fff2cc;
+    }
+    &.blue {
+      background-color: #e6f7ff;
+      border: 2px solid #cceeff;
+    }
+    &.green {
+      background-color: #f0fff4;
+      border: 2px solid #d9f7e3;
+    }
+    &.pink {
+      background-color: #fff0f6;
+      border: 2px solid #ffd6e6;
+    }
+  }
+}
+
+/* 第二大模块：猜你喜欢 + 商品列表 */
+.bottom-module {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  background-color: #ffffff;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* 猜你喜欢标签栏 */
+.tab-section {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+  }
+
+  .tab-item {
+    padding: 8px 18px;
+    background-color: #f5f5f5;
+    border-radius: 20px;
+    font-size: 14px;
+    color: #1f1f1f;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+
+    &:hover {
+      background-color: #ff6a00;
+    }
+
+    &.active {
+      background-color: #ff6a00;
+      color: #fff;
+      font-weight: 600;
+    }
+  }
+}
+
+/* 商品列表容器 */
 .goods-container {
+  background-color: transparent;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+
   .goods-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 20px;
 
     .goods-card {
       background: #fff;
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
       transition: all 0.3s ease;
       cursor: pointer;
 
       &:hover {
         transform: translateY(-4px);
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
       }
 
       .goods-image-wrapper {
         position: relative;
         width: 100%;
-        height: 200px;
+        height: 220px;
         overflow: hidden;
 
         .goods-image {
           width: 100%;
           height: 100%;
           object-fit: cover;
-          transition: transform 0.3s ease;
+          transition: transform 0.4s ease;
         }
 
         &:hover .goods-image {
-          transform: scale(1.05);
+          transform: scale(1.1);
         }
 
         .goods-tag {
           position: absolute;
-          top: 8px;
-          left: 8px;
+          top: 10px;
+          left: 10px;
           background: #ff4d4f;
           color: #fff;
-          font-size: 12px;
-          padding: 2px 6px;
-          border-radius: 4px;
+          font-size: 11px;
+          padding: 3px 8px;
+          border-radius: 12px;
+          font-weight: 600;
         }
       }
 
       .goods-info {
-        padding: 12px;
+        padding: 14px;
 
         .goods-name {
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 600;
           margin-bottom: 8px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          color: #333;
         }
 
         .goods-price {
-          font-size: 18px;
+          font-size: 20px;
           color: #ff4d4f;
           font-weight: bold;
-          margin-bottom: 8px;
+          margin-bottom: 10px;
+          display: flex;
+          align-items: baseline;
+          &::before {
+            content: '¥';
+            font-size: 14px;
+            margin-right: 2px;
+          }
         }
 
         .goods-meta {
@@ -302,8 +955,9 @@ const formatPrice = (price) => {
 
           .stock, .like-count {
             background: #f5f5f5;
-            padding: 2px 6px;
-            border-radius: 4px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
           }
         }
 
@@ -314,39 +968,158 @@ const formatPrice = (price) => {
           font-size: 12px;
           color: #666;
 
+          .el-avatar {
+            border: 1px solid #eee;
+          }
+
           .seller-name {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            max-width: 100px;
           }
         }
       }
     }
   }
+
+  /* 自定义骨架屏样式 */
+  .skeleton-grid {
+    .skeleton-card {
+      cursor: default;
+      &:hover {
+        transform: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      }
+
+      .skeleton-image {
+        width: 100%;
+        height: 220px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+        border-radius: 12px 12px 0 0;
+      }
+
+      .skeleton-name {
+        width: 80%;
+        height: 20px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+        border-radius: 4px;
+        margin-bottom: 12px;
+      }
+
+      .skeleton-price {
+        width: 60%;
+        height: 24px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+        border-radius: 4px;
+        margin-bottom: 12px;
+      }
+
+      .skeleton-meta-item {
+        width: 70px;
+        height: 18px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+        border-radius: 9px;
+        display: inline-block;
+      }
+
+      .skeleton-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+      }
+
+      .skeleton-seller-name {
+        width: 80px;
+        height: 16px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+        border-radius: 4px;
+        display: inline-block;
+      }
+    }
+  }
 }
 
+/* 骨架屏动画 */
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 底部 */
+.footer-wrapper {
+  width: 100%;
+  flex-shrink: 0;
+  background-color: #fff;
+  border-top: 1px solid #e5e5e5;
+}
+
+/* 响应式适配 */
 @media (max-width: 768px) {
-  .goods-list-page {
+  .main-content {
+    padding: 12px;
+    gap: 16px;
+  }
+
+  .top-module {
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px;
+    height: auto; /* 移动端恢复自适应高度 */
+    min-height: 368px;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    .category-menu {
+      display: flex;
+      overflow-x: auto;
+      .static-category-item {
+        white-space: nowrap;
+        margin: 0 4px;
+        min-width: 150px;
+      }
+    }
+  }
+
+  .top-right-content {
+    flex-direction: column;
+  }
+
+  .banner-section {
+    width: 100%;
+    height: 200px;
+  }
+
+  .module-section {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .bottom-module {
     padding: 12px;
   }
 
-  .filter-section .filter-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-
-    .category-btn-group {
-      width: 100%;
-    }
-
-    .category-btn {
-      padding: 2px 12px !important;
-      font-size: 12px !important;
-    }
-  }
-
   .goods-container .goods-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 12px;
 
     .goods-card {
@@ -355,7 +1128,7 @@ const formatPrice = (price) => {
       }
 
       .goods-info {
-        padding: 8px;
+        padding: 10px;
 
         .goods-name {
           font-size: 14px;
@@ -364,6 +1137,11 @@ const formatPrice = (price) => {
         .goods-price {
           font-size: 16px;
         }
+      }
+
+      /* 响应式骨架屏调整 */
+      .skeleton-image {
+        height: 140px;
       }
     }
   }

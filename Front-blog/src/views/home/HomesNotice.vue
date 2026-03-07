@@ -1,10 +1,13 @@
 <script lang="js" setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { ElMessage } from 'element-plus';
+import defaultAvater from '@/assets/default.png'
+import { useRouter } from 'vue-router'
 import {
   getMyChatListService,
   getSessionMsgService,
   sendChatMsgService,
+  markChatMsgAsReadService,
 } from "@/api/chat.js";
 import { useTokenStore } from "@/stores/token.js";
 import useUserInfoStore from "@/stores/userInfo.js";
@@ -12,22 +15,39 @@ import useUserInfoStore from "@/stores/userInfo.js";
 // ========== 状态管理 ==========
 const userInfoStore = useUserInfoStore();
 const tokenStore = useTokenStore();
+const router = useRouter()
 
 // ========== 响应式数据 ==========
 const chatList = ref([]);
 const msgList = ref([]);
 const currentSessionId = ref(null);
 const inputContent = ref("");
-const userId = ref(userInfoStore.info.id);
+const userId = computed(() => userInfoStore.info?.id);
 const pageNum = ref(1);
 const pageSize = ref(20);
 let ws = null;
+
+// 新增：当前会话的交易信息（模拟截图中的商品/订单卡片）
+const currentSessionTradeInfo = computed(() => {
+  const session = chatList.value.find(item => item.id === currentSessionId.value);
+  if (!session) return null;
+  return {
+    title: session.lastMsg,
+    previewImg: session.friendAvatar, // 用好友头像作为商品预览图
+  };
+});
 
 // ========== 方法定义 ==========
 const loadChatList = async () => {
   try {
     const res = await getMyChatListService();
-    chatList.value = res.data.data;
+    // 计算当前用户的未读数量
+    const myId = userId.value;
+    chatList.value = res.data.map(session => ({
+      ...session,
+      unreadCount: session.fromUserId === myId ? session.toUnread : session.fromUnread,
+      time: formatTime(session.lastMsgTime) // 格式化时间
+    }));
   } catch (error) {
     ElMessage.error("加载聊天列表失败");
     console.error(error);
@@ -38,16 +58,19 @@ const enterChat = async (sessionId) => {
   currentSessionId.value = sessionId;
   pageNum.value = 1;
   await loadChatMsg();
+  // 进入会话后自动标记消息为已读
+  await markAsRead(sessionId);
 };
 
 const loadChatMsg = async () => {
+  if (!currentSessionId.value) return;
   try {
     const res = await getSessionMsgService(
         currentSessionId.value,
         pageNum.value,
         pageSize.value
     );
-    msgList.value = res.data.data.items;
+    msgList.value = res.data.items; // 修正：从PageBean中取items
     await nextTick(() => {
       const msgListEl = document.querySelector(".msg-list");
       if (msgListEl) {
@@ -87,7 +110,7 @@ const sendMsg = async () => {
       content: inputContent.value.trim()
     });
 
-    msgList.value.push(res.data.data);
+    msgList.value.push(res.data);
     inputContent.value = "";
 
     await nextTick(() => {
@@ -104,6 +127,17 @@ const sendMsg = async () => {
   }
 };
 
+// 新增：标记会话消息为已读
+const markAsRead = async (sessionId) => {
+  try {
+    await markChatMsgAsReadService(sessionId);
+    // 刷新聊天列表，更新未读数量
+    await loadChatList();
+  } catch (error) {
+    console.error("标记已读失败", error);
+  }
+};
+
 const initWebSocket = () => {
   if (!userId.value) {
     console.warn("用户ID为空，无法建立WebSocket连接");
@@ -114,7 +148,7 @@ const initWebSocket = () => {
     ws.close();
   }
 
-  const wsUrl = `ws://${window.location.host}/ws/chat/${userId.value}`;
+  const wsUrl = `ws://localhost:8080/ws/chat/${userId.value}/${tokenStore.token}`;
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
@@ -145,11 +179,26 @@ const initWebSocket = () => {
     }
   };
 
-  ws.onclose = () => {
-    console.log("WebSocket连接关闭，正在重连...");
-    setTimeout(() => {
-      initWebSocket();
-    }, 3000);
+
+
+  ws.onclose = (event) => {
+    // 打印关闭的核心信息：状态码+原因
+    console.log(`WebSocket关闭 - 状态码：${event.code}，原因：${event.reason}`);
+
+    // 只有非正常关闭才重连（排除手动关闭/正常认证失败）
+    let reconnectTimer;
+    if (event.code !== 1000 && event.code !== 1008) { // 1008=策略违反（认证失败）
+      reconnectTimer = setTimeout(() => {
+        initWebSocket();
+      }, 3000);
+    } else {
+      // 认证失败时，停止重连并提示用户
+      if (event.code === 1008) {
+        ElMessage.error(`连接失败：${event.reason}，请重新登录`);
+      }
+      // 清理计时器
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    }
   };
 
   ws.onerror = (error) => {
@@ -165,6 +214,13 @@ const closeWebSocket = () => {
   }
 };
 
+// 辅助函数：格式化时间
+const formatTime = (timeStr) => {
+  if (!timeStr) return "";
+  const date = new Date(timeStr);
+  return date.toLocaleString();
+};
+
 // ========== 生命周期 ==========
 onMounted(() => {
   loadChatList();
@@ -174,21 +230,23 @@ onMounted(() => {
 onUnmounted(() => {
   closeWebSocket();
 });
+
+const goToSellerDetail=()=>{
+  router.push(`/seller/detail/${userId.value}`);
+}
 </script>
 
 <template>
   <div class="chat-page">
-    <!-- 中间容器：占屏幕 80% 并居中 -->
     <div class="chat-container">
       <div class="chat-main">
         <!-- 左侧聊天列表 -->
         <div class="chat-list">
           <div class="chat-list-header">
             <h2>消息</h2>
-            <div class="header-actions">
-              <span class="icon-btn">➕</span>
-              <span class="icon-btn">⚙️</span>
-            </div>
+<!--            <div class="header-actions">-->
+<!--              <span class="icon-btn">⚙️</span>-->
+<!--            </div>-->
           </div>
           <div
               v-for="session in chatList"
@@ -197,10 +255,10 @@ onUnmounted(() => {
               @click="enterChat(session.id)"
               :class="{ active: currentSessionId === session.id }"
           >
-            <img :src="session.friendAvatar" class="avatar" alt="" />
+            <img :src="session.friendAvatar || defaultAvater " class="avatar" alt="avatar" />
             <div class="info">
-              <div class="nickname">{{ session.friendNickname }}</div>
-              <div class="last-msg">{{ session.lastMsg }}</div>
+              <div class="nickname">{{ session.friendNickname || '未知用户' }}</div>
+              <div class="last-msg">{{ session.lastMsg || '暂无消息' }}</div>
             </div>
             <div class="meta">
               <span class="time">{{ session.time }}</span>
@@ -208,12 +266,11 @@ onUnmounted(() => {
                 {{ session.unreadCount }}
               </div>
             </div>
-            <!-- 预览图（如果有） -->
             <img
-                v-if="session.previewImg"
-                :src="session.previewImg"
+                v-if="session.friendAvatar"
+                :src="session.friendAvatar"
                 class="preview-img"
-                alt=""
+                alt="商品预览"
             />
           </div>
         </div>
@@ -226,6 +283,27 @@ onUnmounted(() => {
           </div>
 
           <template v-else>
+            <!-- 新增：顶部会话信息栏（参考闲鱼聊天顶部） -->
+            <div class="session-header">
+              <div class="session-info">
+                <span class="session-name">
+                  {{ chatList.find(s => s.id === currentSessionId)?.friendNickname || '未知' }}
+                </span>
+                <div class="session-actions">
+                  <button class="action-btn" @click="goToSellerDetail">闲鱼号</button>
+                  <button class="action-btn" @click="()=>{ElMessage.success('暂未开发相应功能')}">...</button>
+                </div>
+              </div>
+
+              <!-- 交易卡片（参考截图） -->
+              <div v-if="currentSessionTradeInfo" class="trade-card">
+                <img :src="currentSessionTradeInfo.previewImg" class="trade-img" alt="商品图片" />
+                <div class="trade-info">
+                  <div class="trade-status">{{ currentSessionTradeInfo.status }}</div>
+                </div>
+              </div>
+            </div>
+
             <!-- 消息列表 -->
             <div class="msg-list">
               <div
@@ -233,10 +311,12 @@ onUnmounted(() => {
                   :key="msg.id"
                   :class="['msg-item', msg.senderId === userId ? 'send' : 'receive']"
               >
-                <img :src="msg.senderAvatar" class="msg-avatar" alt="" />
+                <img :src="msg.senderAvatar || '/default-avatar.png'" class="msg-avatar" alt="头像" />
                 <div class="msg-bubble">
                   <div class="msg-content">{{ msg.content }}</div>
-                  <div class="msg-time">{{ msg.createTime }}</div>
+                  <div class="msg-time">{{ formatTime(msg.createTime) }}</div>
+                  <!-- 新增：未读标记（参考截图“未读”角标） -->
+                  <div v-if="msg.isRead === 0 && msg.senderId !== userId" class="unread-tag">未读</div>
                 </div>
               </div>
             </div>
@@ -247,7 +327,7 @@ onUnmounted(() => {
                 <input
                     v-model="inputContent"
                     type="text"
-                    placeholder="请输入消息..."
+                    placeholder="请输入消息，按Enter键发送或点击发送按钮发送"
                     @keyup.enter="sendMsg"
                 />
                 <button @click="sendMsg" class="send-btn">发送</button>
@@ -270,7 +350,6 @@ onUnmounted(() => {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* 中间容器：占屏幕 80% 并居中 */
 .chat-container {
   width: 80%;
   height: 80vh;
@@ -443,6 +522,87 @@ onUnmounted(() => {
   color: #999;
 }
 
+/* 新增：会话顶部信息栏 */
+.session-header {
+  padding: 12px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  background-color: #fff;
+}
+
+.session-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.session-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.session-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  padding: 4px 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  background-color: #fff;
+  color: #333;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* 新增：交易卡片 */
+.trade-card {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background-color: #fff;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+}
+
+.trade-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  object-fit: cover;
+  margin-right: 12px;
+}
+
+.trade-info {
+  flex: 1;
+}
+
+.trade-price {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ff4d4f;
+  margin-bottom: 4px;
+}
+
+.trade-freight {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.trade-status {
+  font-size: 12px;
+  color: #666;
+}
+
+.trade-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .msg-list {
   flex: 1;
   padding: 20px;
@@ -500,6 +660,34 @@ onUnmounted(() => {
 
 .msg-item.send .msg-time {
   text-align: left;
+}
+
+/* 新增：未读标记 */
+.unread-tag {
+  position: absolute;
+  right: -20px;
+  bottom: 0;
+  font-size: 11px;
+  color: #ff4d4f;
+}
+
+/* 新增：输入框工具栏（表情、图片等） */
+.msg-input-toolbar {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.toolbar-icon {
+  font-size: 20px;
+  color: #666;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.toolbar-icon:hover {
+  color: #ff6b35;
 }
 
 .msg-input-wrapper {

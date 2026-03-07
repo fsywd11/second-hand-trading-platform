@@ -8,6 +8,8 @@ import com.itheima.vo.BuyerViewSellerVO;
 import com.itheima.vo.GoodsDetailVO;
 import com.itheima.vo.GoodsVO;
 
+import java.util.List;
+
 /**
  * 商品服务接口
  */
@@ -25,4 +27,11 @@ public interface GoodsService {
     void updateStatus(Integer id, Integer status);
 
     BuyerViewSellerVO findSellerByUserId(Integer id);
+
+    List<GoodsVO> ragSearch(String query);
+
+    /**
+     * 全量校验并清理Milvus脏数据
+     */
+    void cleanMilvusDirtyData();
 }

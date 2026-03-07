@@ -8,7 +8,8 @@ import {
   getOrderListService,
   getOrderDetailService,
   updateOrderStatusService,
-  cancelOrderService
+  cancelOrderService,
+  deleteOrderService
 } from '@/api/order.js'
 
 const route = useRoute()
@@ -106,17 +107,17 @@ const handleStatusChange = async (row) => {
 
 // 取消订单
 const cancelOrder = (row) => {
-  ElMessageBox.confirm('你确认要取消该订单吗?', '温馨提示', {
+  ElMessageBox.confirm('你确认要删除该订单吗?', '温馨提示', {
     confirmButtonText: '确认',
     cancelButtonText: '取消',
     type: 'warning'
   }).then(async () => {
     try {
-      await cancelOrderService(row.id)
-      ElMessage.success('订单取消成功')
+      await deleteOrderService(row.id)
+      ElMessage.success('订单删除成功')
       await getOrderList()
     } catch (error) {
-      ElMessage.error('取消订单失败：' + error.message)
+      ElMessage.error('订单删除失败：' + error.message)
     }
   }).catch(() => {
     ElMessage.info('用户取消了操作')
@@ -233,7 +234,7 @@ onMounted(async () => {
           <template #default="{ row }">
             <div class="table-actions">
               <el-button :icon="View" type="primary" link @click="viewOrderDetail(row)">详情</el-button>
-              <el-button :icon="Delete" type="danger" link @click="cancelOrder(row)" :disabled="[4,5].includes(row.orderStatus)">取消</el-button>
+              <el-button :icon="Delete" type="danger" link @click="cancelOrder(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
