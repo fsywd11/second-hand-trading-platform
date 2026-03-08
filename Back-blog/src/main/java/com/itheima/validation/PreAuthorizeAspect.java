@@ -4,6 +4,7 @@ import com.itheima.anno.PreAuthorize;
 import com.itheima.pojo.Result;
 import com.itheima.service.PermissionService;
 import com.itheima.util.ThreadLocalUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -16,6 +17,7 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Component
 @Aspect
 public class PreAuthorizeAspect {

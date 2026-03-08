@@ -1,5 +1,5 @@
 <script setup lang="js">
-import { ref, onMounted} from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, ElForm, ElFormItem, ElInput, ElInputNumber, ElDialog } from "element-plus";
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -11,7 +11,9 @@ import {
   applyRefundService // 导入退款申请接口
 } from "@/api/order.js";
 import useUserInfoStore from '@/stores/userInfo.js';
-import {userInfoServices} from '@/api/user.js';
+import { userInfoServices } from '@/api/user.js';
+// 新增：导入创建会话API
+import { createChatSessionService } from "@/api/chat.js";
 
 const route = useRoute();
 const router = useRouter();
@@ -28,58 +30,62 @@ const getUserInfo = async () => {
 };
 
 const orderStatus = ref('');
-
 const orderList = ref([]);
 const loading = ref(false);
-
 const pageNum = ref(1);
 const total = ref(0);
 const pageSize = ref(10);
 
-// 状态配置
+// 订单状态配置（严格匹配后端OrderStatusEnum）
 const orderStatusOptions = [
   { label: '全部', value: '' },
-  { label: '待付款', value: '1' },
-  { label: '待发货', value: '2' },
-  { label: '待收货', value: '3' },
-  { label: '待评价', value: '4' },
-  { label: '退款中', value: '5' }
+  { label: '待付款', value: '1' }, // PENDING_PAY
+  { label: '待发货', value: '2' }, // PENDING_DELIVERY
+  { label: '待收货', value: '3' }, // PENDING_RECEIVE
+  { label: '已完成', value: '4' }, // COMPLETED
+  { label: '已取消', value: '5' }  // CANCELED
 ];
 
-// 状态标签样式映射
+// 订单状态标签样式映射（匹配后端枚举）
 const statusTagType = (status) => {
   const map = {
-    1: 'warning',
-    2: 'primary',
-    3: 'info',
-    4: 'success',
-    5: 'danger'
+    1: 'warning',  // 待付款
+    2: 'primary',  // 待发货
+    3: 'info',     // 待收货
+    4: 'success',  // 已完成
+    5: 'danger'    // 已取消
   };
   return map[status] || 'info';
 };
 
-// 订单卡片状态文字色值映射
+// 订单状态文字样式映射
 const getStatusClass = (status) => {
   const map = {
-    1: 'status-pending-pay',
-    2: 'status-pending-send',
-    3: 'status-pending-receive',
-    4: 'status-success',
-    5: 'status-closed'
+    1: 'status-pending-pay',   // 待付款
+    2: 'status-pending-send',  // 待发货
+    3: 'status-pending-receive',// 待收货
+    4: 'status-success',       // 已完成
+    5: 'status-closed'         // 已取消
   };
   return map[status] || 'status-default';
 };
 
-// 退款状态文本映射（根据实际业务调整）
+// 退款状态配置（严格匹配后端RefundStatusEnum）
+const refundStatusConfig = {
+  0: { text: '无退款', type: 'info' },
+  1: { text: '退款中', type: 'danger' },
+  2: { text: '退款成功', type: 'success' },
+  3: { text: '退款失败', type: 'warning' }
+};
+
+// 获取退款状态文本
 const getRefundStatusText = (refundStatus) => {
-  const map = {
-    0: '未申请退款',
-    1: '退款审核中',
-    2: '退款成功',
-    3: '退款驳回',
-    4: '退款处理中'
-  };
-  return map[refundStatus] || '退款中';
+  return refundStatusConfig[refundStatus]?.text || '未知状态';
+};
+
+// 获取退款状态标签类型
+const getRefundTagType = (refundStatus) => {
+  return refundStatusConfig[refundStatus]?.type || 'info';
 };
 
 // 获取订单列表
@@ -99,16 +105,18 @@ const getOrderList = async () => {
       buyerId: currentUserId
     };
 
-    // 只有当 orderStatus 不为空时才添加到参数中
+    // 订单状态筛选（仅传递后端定义的状态值）
     if (orderStatus.value !== '') {
       params.orderStatus = Number(orderStatus.value);
     }
 
     const result = await getOrderListService(params);
+    // 后端返回的OrderVO已包含refundStatusName，直接使用
     orderList.value = result.data?.items || [];
     total.value = result.data?.total || 0;
   } catch (error) {
     ElMessage.error('获取订单列表失败');
+    console.error('获取订单列表异常：', error);
   } finally {
     loading.value = false;
   }
@@ -143,8 +151,18 @@ const showOrderDetail = async (row) => {
   }
 };
 
-// 核心操作
+// 支付订单（更新为待发货状态）
 const handlePay = async (row) => {
+  // 前置校验：只能支付待付款且无退款的订单
+  if (row.orderStatus !== 1) {
+    ElMessage.error('只有待付款订单可以支付');
+    return;
+  }
+  if (row.refundStatus !== undefined && row.refundStatus !== 0) {
+    ElMessage.error('该订单已申请退款，无法支付');
+    return;
+  }
+
   try {
     await ElMessageBox.confirm(
         `确认支付订单 ${row.orderNo} 吗？\n支付金额：¥${row.totalAmount}`,
@@ -156,17 +174,30 @@ const handlePay = async (row) => {
         }
     );
 
-    await updateOrderStatusService(row.id, 2);
+    // 支付成功后更新为待发货状态（2）
+    await updateOrderStatusService(row.id);
     ElMessage.success('支付成功，等待卖家发货');
     await getOrderList();
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('支付失败');
+      console.error('支付异常：', error);
     }
   }
 };
 
+// 取消订单
 const handleCancel = async (row) => {
+  // 前置校验：只能取消待付款/待发货且无退款中的订单
+  if (![1, 2].includes(row.orderStatus)) {
+    ElMessage.error('只有待付款/待发货订单可以取消');
+    return;
+  }
+  if (row.refundStatus === 1) {
+    ElMessage.error('该订单正在退款中，无法取消');
+    return;
+  }
+
   try {
     await ElMessageBox.confirm(
         `确认取消订单 ${row.orderNo} 吗？`,
@@ -184,11 +215,23 @@ const handleCancel = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('取消订单失败');
+      console.error('取消订单异常：', error);
     }
   }
 };
 
+// 确认收货
 const handleConfirmReceive = async (row) => {
+  // 前置校验：只能确认待收货且无退款中的订单
+  if (row.orderStatus !== 3) {
+    ElMessage.error('只有待收货订单可以确认收货');
+    return;
+  }
+  if (row.refundStatus === 1) {
+    ElMessage.error('该订单正在退款中，无法确认收货');
+    return;
+  }
+
   try {
     await ElMessageBox.confirm(
         `确认已收到商品吗？\n订单号：${row.orderNo}`,
@@ -206,6 +249,7 @@ const handleConfirmReceive = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('确认收货失败');
+      console.error('确认收货异常：', error);
     }
   }
 };
@@ -229,22 +273,28 @@ const refundFormRules = {
   ]
 };
 
-// 声明表单引用（解决TS报错）
 const refundFormRef = ref(null);
 
-// 打开退款申请弹窗（增加退款状态校验）
+// 打开退款申请弹窗（严格校验退款条件）
 const openRefundDialog = (row) => {
-  // 前置校验：如果已申请退款，提示用户并返回
+  // 1. 校验订单状态：只能对已支付的订单申请退款（待发货/待收货/已完成）
+  const allowRefundStatus = [2, 3, 4];
+  if (!allowRefundStatus.includes(row.orderStatus)) {
+    ElMessage.error('只有待发货/待收货/已完成的订单可以申请退款');
+    return;
+  }
+
+  // 2. 校验退款状态：只能对无退款的订单申请
   if (row.refundStatus !== undefined && row.refundStatus !== 0) {
     ElMessage.info(`该订单${getRefundStatusText(row.refundStatus)}，无法重复申请`);
-    // 引导用户查看详情
     showOrderDetail(row);
     return;
   }
 
+  // 3. 初始化退款表单
   currentRefundOrder.value = row;
   refundForm.value = {
-    refundAmount: row.totalAmount,
+    refundAmount: row.totalAmount, // 默认全额退款
     refundReason: ''
   };
   refundDialogVisible.value = true;
@@ -252,7 +302,7 @@ const openRefundDialog = (row) => {
 
 // 提交退款申请
 const submitRefundApply = async () => {
-  // 手动校验表单（解决TS报错）
+  // 表单校验
   if (refundFormRef.value) {
     try {
       await refundFormRef.value.validate();
@@ -262,17 +312,15 @@ const submitRefundApply = async () => {
     }
   }
 
-  // 基础验证
+  // 业务规则校验
   if (!refundForm.value.refundAmount || refundForm.value.refundAmount <= 0) {
     ElMessage.error('请输入有效的退款金额');
     return;
   }
-
   if (refundForm.value.refundAmount > currentRefundOrder.value.totalAmount) {
     ElMessage.error(`退款金额不能超过订单总额 ¥${currentRefundOrder.value.totalAmount}`);
     return;
   }
-
   if (!refundForm.value.refundReason.trim()) {
     ElMessage.error('请填写退款原因');
     return;
@@ -292,13 +340,12 @@ const submitRefundApply = async () => {
 
     refundLoading.value = true;
 
-    // 构造退款申请参数
+    // 构造退款申请参数（匹配后端RefundApplyDTO）
     const refundApplyDTO = {
       orderId: currentRefundOrder.value.id,
-      orderNo: currentRefundOrder.value.orderNo,
-      buyerId: userInfoStore.info.id,
       refundAmount: refundForm.value.refundAmount,
-      refundReason: refundForm.value.refundReason
+      refundReason: refundForm.value.refundReason,
+      refundRemark: '' // 可选备注
     };
 
     // 调用退款申请接口
@@ -324,12 +371,49 @@ onMounted(async () => {
   const statusFromQuery = route.query.status;
   if (statusFromQuery !== undefined && statusFromQuery !== null && statusFromQuery !== '') {
     const parsedStatus = Number(statusFromQuery);
-    if (!isNaN(parsedStatus) && parsedStatus >= 1 && parsedStatus <= 5) {
+    // 仅匹配后端定义的订单状态值
+    if (!isNaN(parsedStatus) && [1, 2, 3, 4, 5].includes(parsedStatus)) {
       orderStatus.value = String(parsedStatus);
     }
   }
   await getOrderList();
 });
+
+
+// 跳转到商品详情
+const goToDetail = (id) => {
+  const targetUrl = `${window.location.origin}/goods/detail/${id}`;
+  window.open(targetUrl, '_blank');
+}
+
+
+// 发起聊天（聊一聊按钮点击事件）
+const startChat = async (sellerId) => {
+
+  // 2. 获取卖家ID
+  const receiverId = sellerId;
+  if (!receiverId) {
+    ElMessage.error('获取卖家信息失败，无法发起聊天');
+    return;
+  }
+
+  try {
+    // 3. 调用创建会话接口（无则创建，有则返回已有会话）
+    const res = await createChatSessionService(receiverId);
+    const sessionId = res.data.id;
+
+    // 4. 关闭loading并跳转到聊天页面
+    ElMessage.closeAll();
+    await router.push({
+      path: '/homes/notice',
+      query: { sessionId } // 携带会话ID
+    });
+  } catch (error) {
+    ElMessage.closeAll();
+    console.error('创建聊天会话失败:', error);
+    ElMessage.error('发起聊天失败，请稍后重试');
+  }
+};
 </script>
 
 <template>
@@ -361,22 +445,23 @@ onMounted(async () => {
           <!-- 卡片头部：卖家信息 + 订单状态 + 退款状态 -->
           <div class="order-card-header">
             <div class="seller-info">
-              <el-avatar :size="24" :src="order.sellerAvatar" v-if="order.sellerAvatar" />
+              <el-avatar :size="24" :src="order.sellerPic" v-if="order.sellerPic" />
               <el-avatar :size="24" v-else>{{ order.sellerNickname?.charAt(0) || '用' }}</el-avatar>
               <span class="seller-name">{{ order.sellerNickname }}</span>
             </div>
             <div class="status-group">
-              <span class="order-status-text" :class="getStatusClass(order.orderStatus)">
+              <!-- 订单状态：使用后端返回的orderStatusName -->
+              <span class="order-status-text" v-if="order.orderStatus !== undefined" :class="getStatusClass(order.orderStatus)">
                 {{ order.orderStatusName }}
               </span>
-              <!-- 显示退款状态标签 -->
+              <!-- 退款状态标签：动态样式 -->
               <el-tag
                   v-if="order.refundStatus !== undefined && order.refundStatus !== 0"
                   size="small"
-                  type="danger"
+                  :type="getRefundTagType(order.refundStatus)"
                   class="refund-status-tag"
               >
-                {{ getRefundStatusText(order.refundStatus) }}
+                {{ order.refundStatusName}}
               </el-tag>
             </div>
           </div>
@@ -393,21 +478,44 @@ onMounted(async () => {
           <!-- 操作按钮区域 -->
           <div class="order-action-bar">
             <!-- 联系卖家按钮 -->
-            <el-button size="small" class="action-btn">联系卖家</el-button>
+            <el-button size="small" class="action-btn"  @click="startChat(order.sellerId)">联系卖家</el-button>
 
-            <el-button size="small" class="action-btn" v-if="order.orderStatus === 5">删除订单</el-button>
-
-            <!-- 原有核心操作按钮 -->
-            <el-button size="small" class="action-btn" @click="handlePay(order)" v-if="order.orderStatus === 1">付款</el-button>
-            <el-button size="small" class="action-btn" @click="handleCancel(order)" v-if="order.orderStatus === 1">取消订单</el-button>
-            <el-button size="small" class="action-btn" @click="handleConfirmReceive(order)" v-if="order.orderStatus === 3">确认收货</el-button>
-
-            <!-- 退款按钮：仅在待发货/待收货状态且未申请退款时显示 -->
+            <!-- 支付按钮：仅待付款且无退款 -->
             <el-button
                 size="small"
                 class="action-btn primary"
+                @click="handlePay(order)"
+                v-if="order.orderStatus === 1 && (order.refundStatus === undefined || order.refundStatus === 0)"
+            >
+              付款
+            </el-button>
+
+            <!-- 取消订单：仅待付款且无退款中 -->
+            <el-button
+                size="small"
+                class="action-btn"
+                @click="handleCancel(order)"
+                v-if="order.orderStatus === 1 && order.refundStatus !== 1"
+            >
+              取消订单
+            </el-button>
+
+            <!-- 确认收货：仅待收货且无退款中 -->
+            <el-button
+                size="small"
+                class="action-btn primary"
+                @click="handleConfirmReceive(order)"
+                v-if="order.orderStatus === 3 && order.refundStatus !== 2"
+            >
+              确认收货
+            </el-button>
+
+            <!-- 申请退款：仅待发货/待收货/已完成且无退款 -->
+            <el-button
+                size="small"
+                class="action-btn"
                 @click="openRefundDialog(order)"
-                v-if="[2, 3].includes(order.orderStatus) && (order.refundStatus === undefined || order.refundStatus === 0)"
+                v-if="[2, 3, 4].includes(order.orderStatus) && (order.refundStatus === undefined || order.refundStatus === 0)"
                 type="danger"
             >
               申请退款
@@ -418,14 +526,17 @@ onMounted(async () => {
                 size="small"
                 class="action-btn"
                 disabled
+                :type="getRefundTagType(order.refundStatus)"
                 v-else-if="order.refundStatus !== undefined && order.refundStatus !== 0"
             >
-              {{ getRefundStatusText(order.refundStatus) }}
+              {{ order.refundStatusName }}
             </el-button>
 
+            <!-- 详情按钮 -->
             <el-button size="small" class="action-btn primary" @click="showOrderDetail(order)">详情</el-button>
-            <el-button size="small" class="action-btn primary">再次购买</el-button>
-            <el-button size="small" class="action-btn primary" v-if="order.orderStatus === 4">去评价</el-button>
+
+            <!-- 去评价：仅已完成订单 -->
+            <el-button size="small" class="action-btn primary" v-if="order.orderStatus === 4" @click="goToDetail(order.goodsId)">去评价</el-button>
           </div>
         </div>
       </div>
@@ -458,17 +569,23 @@ onMounted(async () => {
               {{ orderDetail.orderStatusName }}
             </el-tag>
           </el-descriptions-item>
-          <!-- 详情页显示退款状态 -->
+          <!-- 详情页退款状态：动态样式 -->
           <el-descriptions-item label="退款状态" v-if="orderDetail.refundStatus !== undefined">
-            <el-tag :type="orderDetail.refundStatus === 0 ? 'info' : 'danger'">
-              {{ getRefundStatusText(orderDetail.refundStatus) }}
+            <el-tag :type="getRefundTagType(orderDetail.refundStatus)">
+              {{ orderDetail.refundStatusName || getRefundStatusText(orderDetail.refundStatus) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="订单金额">
             <span class="amount">¥{{ orderDetail.totalAmount }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="卖家">
+          <el-descriptions-item label="支付方式">
+            {{ orderDetail.payTypeName || '未支付' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="卖家昵称">
             {{ orderDetail.sellerNickname || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="买家昵称">
+            {{ orderDetail.buyerNickname || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="创建时间" :span="2">
             {{ orderDetail.createTime ? orderDetail.createTime.replace('T', ' ').substring(0, 19) : '-' }}
@@ -485,12 +602,19 @@ onMounted(async () => {
           <el-descriptions-item label="取消时间" :span="2">
             {{ orderDetail.cancelTime ? orderDetail.cancelTime.replace('T', ' ').substring(0, 19) : '-' }}
           </el-descriptions-item>
-          <!-- 退款相关时间 -->
-          <el-descriptions-item label="退款申请时间" :span="2" v-if="orderDetail.refundApplyTime">
-            {{ orderDetail.refundApplyTime ? orderDetail.refundApplyTime.replace('T', ' ').substring(0, 19) : '-' }}
+
+          <!-- 退款详情展示 -->
+          <el-descriptions-item label="退款金额" :span="2" v-if="orderDetail.refundAmount">
+            ¥{{ orderDetail.refundAmount }}
           </el-descriptions-item>
-          <el-descriptions-item label="退款完成时间" :span="2" v-if="orderDetail.refundCompleteTime">
-            {{ orderDetail.refundCompleteTime ? orderDetail.refundCompleteTime.replace('T', ' ').substring(0, 19) : '-' }}
+          <el-descriptions-item label="退款原因" :span="2" v-if="orderDetail.refundReason">
+            {{ orderDetail.refundReason }}
+          </el-descriptions-item>
+          <el-descriptions-item label="退款时间" :span="2" v-if="orderDetail.refundTime">
+            {{ orderDetail.refundTime ? orderDetail.refundTime.replace('T', ' ').substring(0, 19) : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="退款备注" :span="2" v-if="orderDetail.refundRemark">
+            {{ orderDetail.refundRemark }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -508,6 +632,9 @@ onMounted(async () => {
         <el-descriptions :column="1" border>
           <el-descriptions-item label="收货地址">
             {{ orderDetail.address || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="买家电话" v-if="orderDetail.buyerPhone">
+            {{ orderDetail.buyerPhone }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -527,7 +654,6 @@ onMounted(async () => {
         title="申请退款"
         width="500px"
         :close-on-click-modal="false"
-        :before-close="() => { refundLoading.value = false }"
     >
       <el-form
           :model="refundForm"
@@ -536,10 +662,10 @@ onMounted(async () => {
           label-width="100px"
           class="refund-form"
       >
-        <el-form-item label="订单编号" prop="orderNo">
+        <el-form-item label="订单编号">
           <span>{{ currentRefundOrder?.orderNo || '-' }}</span>
         </el-form-item>
-        <el-form-item label="订单金额" prop="totalAmount">
+        <el-form-item label="订单金额">
           <span>¥{{ currentRefundOrder?.totalAmount || 0 }}</span>
         </el-form-item>
         <el-form-item label="退款金额" prop="refundAmount">
@@ -746,6 +872,7 @@ onMounted(async () => {
   gap: 10px;
   padding: 12px 16px;
   border-top: 1px solid #f5f5f5;
+  flex-wrap: wrap; // 适配小屏幕
 
   .action-btn {
     border-radius: 20px;
@@ -861,5 +988,15 @@ onMounted(async () => {
 :deep(.el-descriptions__label) {
   font-weight: 500;
   width: 100px;
+}
+
+// 响应式适配
+@media (max-width: 768px) {
+  .order-action-bar {
+    justify-content: center;
+  }
+  .pagination-wrapper {
+    justify-content: center;
+  }
 }
 </style>

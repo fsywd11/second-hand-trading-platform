@@ -16,7 +16,7 @@ public interface OrderService {
     String createOrder(OrderCreateDTO orderCreateDTO);
     PageBean<OrderVO> list(OrderQueryDTO queryDTO);
     OrderDetailVO findById(Integer id);
-    void updateStatus(Integer id, Integer status);
+    void updateStatus(Integer id);
     void cancelOrder(Integer id);
     void confirmReceive(Integer id);
 
@@ -27,4 +27,9 @@ public interface OrderService {
 
     //删除订单
     void deleteOrder(Integer id);
+
+    void sendOrder(Integer id);
+
+    // 根据订单编号查询订单
+    OrderVO findByOrderNo(String orderNo);
 }

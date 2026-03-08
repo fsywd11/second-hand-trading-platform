@@ -173,4 +173,11 @@
         </foreach>
     </select>
 
+    <!-- GoodsMapper.xml -->
+    <select id="findAllOnSale" resultType="com.itheima.pojo.Goods">
+        SELECT id, goods_name, stock, goods_status
+        FROM goods
+        WHERE goods_status = 1 <!-- 1对应ON_SALE在售状态 -->
+    </select>
+
 </mapper>

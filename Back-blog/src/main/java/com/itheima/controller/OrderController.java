@@ -57,10 +57,10 @@ public class OrderController {
 
     // 4. 更新订单状态（支付/发货/完成）
     @PreAuthorize("/order/updateStatus")
-    @PutMapping("/status/{id}/{status}")
+    @PutMapping("/status/{id}")
     @Operation(summary = "更新订单状态", description = "支付/发货/完成等状态更新")
-    public Result updateStatus(@PathVariable Integer id, @PathVariable Integer status) {
-        orderService.updateStatus(id, status);
+    public Result updateStatus(@PathVariable Integer id) {
+        orderService.updateStatus(id);
         return Result.success("订单状态更新成功");
     }
 
@@ -107,5 +107,24 @@ public class OrderController {
     public Result deleteOrder(@PathVariable Integer id) {
         orderService.deleteOrder(id);
         return Result.success("删除订单成功");
+    }
+
+
+    //订单发货
+    @PreAuthorize("/order/send/{id}")
+    @PutMapping("/send/{id}")
+    @Operation(summary = "订单发货", description = "订单发货")
+    public Result sendOrder(@PathVariable Integer id) {
+        orderService.sendOrder(id);
+        return Result.success("订单发货成功");
+    }
+
+    //根据订单编号查询某一条订单
+    @PreAuthorize("/order/findByOrderNo/{orderNo}")
+    @GetMapping("/findByOrderNo/{orderNo}")
+    @Operation(summary = "根据订单编号查询某条订单", description = "根据订单编号查询某条订单")
+    public Result<OrderVO> findByOrderNo(@PathVariable String orderNo) {
+        OrderVO orderVO = orderService.findByOrderNo(orderNo);
+        return Result.success(orderVO);
     }
 }

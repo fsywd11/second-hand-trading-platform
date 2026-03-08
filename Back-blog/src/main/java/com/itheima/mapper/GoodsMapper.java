@@ -98,4 +98,7 @@ public interface GoodsMapper {
      * @return 图片列表
      */
     List<GoodsImage> findGoodsImagesByGoodsIds(@Param("goodsIds") List<Integer> goodsIds);
+
+    // GoodsMapper中新增
+    List<Goods> findAllOnSale(); // 查询所有在售商品，用于初始化库存缓存
 }

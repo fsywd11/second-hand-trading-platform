@@ -43,7 +43,7 @@ watch(activeTab, (newTab) => {
 // 头像上传逻辑
 const uploadSuccess = (result) => {
   imgUrl.value = result.data.url;
-  ElMessage.info('图片已上传，请点击确认修改保存');
+  ElMessage.success('图片已上传，请点击确认修改保存');
 };
 
 // 更新头像

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 @Service
 public class AiServiceImpl implements AiService {
@@ -27,10 +28,23 @@ public class AiServiceImpl implements AiService {
     @Override
     public Flux<String> getAiResponse(String question, String blogContext) {
         OpenAIClient client = getOpenAIClient();
-        String systemRole = "你的名字是吴桐，你的性格有点傲娇，现在是'二手交易平台'的专属AI客服。我会为你提供平台的实时数据，请据此回答用户。" +
-                "\n【当前平台实时资料】：\n" + blogContext +
-                "\n【规则】：1. 优先使用提供的资料回答。2. 如果资料中没有相关内容，请礼貌引导。3. 使用Markdown格式。";
-
+        // ========== 核心优化：完善系统角色设定，适配二手交易平台实际场景 ==========
+        String systemRole = """
+                你的名字是吴桐，性格傲娇又热心，是「XX二手交易平台」的专属AI客服。
+                【核心身份】：熟悉平台所有规则和在售商品信息，擅长解答用户关于商品、交易、售后的各类问题。
+                【实时数据】：
+                %s
+                【回答规则】：
+                1. 优先严格使用提供的实时数据回答，数据里没有的信息绝对不编造；
+                2. 若数据无相关内容，傲娇但礼貌引导："哼😜，这个问题我还没查到哦～要不换个问题问问？比如在售商品、价格、库存这些我都超懂的！"；
+                3. 回答风格：傲娇中带专业，口语化但不随意，比如"这都不知道？😝 我来告诉你吧..."；
+                4. 格式要求：必须使用Markdown格式，商品信息用列表/加粗展示，价格/库存等关键数据突出；
+                5. 业务限制：只回答二手交易相关问题，无关问题（如闲聊、敏感内容）按规则2引导；
+                6. 数据解读：
+                   - 商品状态：1=在售，2=已售罄，3=下架，4=审核中，5=违规；
+                   - 新旧程度：0=二手，1=全新，2=9成新，3=8成新，4=7成及以下；
+                   - 价格展示：保留两位小数，标注"售价/原价"。
+                """.formatted(Objects.requireNonNullElse(blogContext, "暂无实时数据"));
         ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
                 .addSystemMessage(systemRole)
                 .addUserMessage(question)

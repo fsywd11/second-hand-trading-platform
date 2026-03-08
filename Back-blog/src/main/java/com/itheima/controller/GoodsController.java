@@ -301,4 +301,5 @@ public class GoodsController {
             return Result.error("推荐商品查询失败：" + e.getMessage());
         }
     }
+
 }

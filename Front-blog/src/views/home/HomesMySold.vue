@@ -1,14 +1,17 @@
 <script setup lang="js">
 import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox, ElInput } from "element-plus";
 import { useRoute, useRouter } from 'vue-router';
 import {
   getOrderListService,
   getOrderDetailService,
-  updateOrderStatusService
+  handleRefundService, sendOrderService // 导入退款处理接口
 } from "@/api/order.js";
 import useUserInfoStore from '@/stores/userInfo.js';
 import { userInfoServices } from '@/api/user.js';
+// 新增：导入创建会话API
+import { createChatSessionService } from "@/api/chat.js";
+
 const route = useRoute();
 const router = useRouter();
 const userInfoStore = useUserInfoStore();
@@ -31,45 +34,56 @@ const pageNum = ref(1);
 const total = ref(0);
 const pageSize = ref(10);
 
-// 状态配置（对齐参考图风格，统一状态文案）
+// 状态配置（严格对齐后端OrderStatusEnum）
 const orderStatusOptions = [
   { label: '全部', value: '' },
-  { label: '待付款', value: '1' },
-  { label: '待发货', value: '2' },
-  { label: '待收货', value: '3' },
-  { label: '已完成', value: '4' }, // 原参考代码是"待评价"，根据卖家视角调整为"已完成"
-  { label: '已取消', value: '5' }  // 原参考代码是"退款中"，根据卖家视角调整为"已取消"
+  { label: '待付款', value: '1' }, // PENDING_PAY
+  { label: '待发货', value: '2' }, // PENDING_DELIVERY
+  { label: '待收货', value: '3' }, // PENDING_RECEIVE
+  { label: '已完成', value: '4' }, // COMPLETED
+  { label: '已取消', value: '5' }  // CANCELED
+  // 注：退款中不是订单状态，是退款状态，无需在订单状态筛选中显示
 ];
 
-// 状态标签样式映射（与参考代码保持一致）
+// 状态标签样式映射（对齐后端OrderStatusEnum）
 const statusTagType = (status) => {
   const map = {
-    1: 'warning',
-    2: 'primary',
-    3: 'info',
-    4: 'success',
-    5: 'danger'
+    1: 'warning',  // 待付款
+    2: 'primary',  // 待发货
+    3: 'info',     // 待收货
+    4: 'success',  // 已完成
+    5: 'danger'    // 已取消
   };
   return map[status] || 'info';
 };
 
-// 订单卡片状态文字色值映射（与参考代码保持一致）
+// 订单卡片状态文字色值映射（对齐后端OrderStatusEnum）
 const getStatusClass = (status) => {
   const map = {
-    1: 'status-pending-pay',
-    2: 'status-pending-send',
-    3: 'status-pending-receive',
-    4: 'status-success',
-    5: 'status-closed'
+    1: 'status-pending-pay',   // 待付款
+    2: 'status-pending-send',  // 待发货
+    3: 'status-pending-receive',// 待收货
+    4: 'status-success',       // 已完成
+    5: 'status-closed'         // 已取消
   };
   return map[status] || 'status-default';
+};
+
+// 退款状态标签样式映射（对齐后端RefundStatusEnum）
+const getRefundTagType = (refundStatus) => {
+  const map = {
+    0: 'info',     // 无退款
+    1: 'danger',   // 退款中
+    2: 'success',  // 退款成功
+    3: 'warning'   // 退款失败
+  };
+  return map[refundStatus] || 'info';
 };
 
 // 获取订单列表
 const getOrderList = async () => {
   loading.value = true;
   try {
-    // 增加用户信息存在性检查，避免空值访问
     if (!userInfoStore.info || !userInfoStore.info.id) {
       ElMessage.error('请先登录');
       await router.push('/login');
@@ -80,15 +94,14 @@ const getOrderList = async () => {
     let params = {
       pageNum: pageNum.value,
       pageSize: pageSize.value,
-      sellerId: currentUserId // 卖家视角使用sellerId
+      sellerId: currentUserId, // 卖家视角筛选
+      orderStatus: orderStatus.value !== '' ? Number(orderStatus.value) : undefined
+      // 退款状态筛选可扩展：refundStatus: xxx
     };
 
-    // 只有当 orderStatus 不为空字符串时才添加到参数中
-    if (orderStatus.value !== '') {
-      params.orderStatus = Number(orderStatus.value);
-    }
-
     const result = await getOrderListService(params);
+    console.log(result);
+    // 后端返回的OrderVO已包含refundStatusName，直接使用
     orderList.value = result.data?.items || [];
     total.value = result.data?.total || 0;
   } catch (error) {
@@ -113,6 +126,15 @@ const dialogVisible = ref(false);
 const orderDetail = ref({});
 const detailLoading = ref(false);
 
+// 退款处理弹窗相关（严格对齐后端RefundHandleDTO）
+const refundHandleDialogVisible = ref(false);
+const currentRefundOrder = ref(null);
+const refundHandleForm = ref({
+  orderId: null,          // 订单ID（必填）
+  handleResult: 2,        // 处理结果：2-退款成功(REFUND_SUCCESS) 3-退款失败(REFUND_FAILED)
+  refundRemark: ''        // 处理备注（驳回理由/同意说明）
+});
+
 const showOrderDetail = async (row) => {
   dialogVisible.value = true;
   detailLoading.value = true;
@@ -127,15 +149,78 @@ const showOrderDetail = async (row) => {
   }
 };
 
-// 处理Tab切换事件（修复原代码中未定义的handleTabClick）
+// 打开退款处理弹窗
+const openRefundHandleDialog = (row) => {
+  currentRefundOrder.value = row;
+  // 初始化退款处理表单（严格对齐后端RefundHandleDTO）
+  refundHandleForm.value = {
+    orderId: row.id,
+    handleResult: 2, // 默认同意退款（REFUND_SUCCESS）
+    refundRemark: ''
+  };
+  refundHandleDialogVisible.value = true;
+};
+
+// 处理退款（严格对齐后端handleRefund接口）
+const handleRefund = async () => {
+  if (!refundHandleForm.value.orderId) {
+    ElMessage.error('订单ID不能为空');
+    return;
+  }
+
+  // 退款失败（驳回）时必须填写备注（后端校验要求）
+  if (refundHandleForm.value.handleResult === 3 && !refundHandleForm.value.refundRemark.trim()) {
+    ElMessage.error('驳回退款必须填写处理备注');
+    return;
+  }
+
+  try {
+    const handleType = refundHandleForm.value.handleResult === 2 ? '同意' : '驳回';
+    await ElMessageBox.confirm(
+        `确认${handleType}该订单的退款申请吗？\n订单号：${currentRefundOrder.value.orderNo}`,
+        `${handleType}退款`,
+        {
+          confirmButtonText: `确认${handleType}`,
+          cancelButtonText: '取消',
+          type: refundHandleForm.value.handleResult === 2 ? 'info' : 'warning'
+        }
+    );
+
+    // 构造后端要求的RefundHandleDTO参数
+    const refundHandleDTO = {
+      orderId: refundHandleForm.value.orderId,
+      handleResult: refundHandleForm.value.handleResult,
+      refundRemark: refundHandleForm.value.refundRemark.trim()
+    };
+
+    // 调用退款处理接口
+    await handleRefundService(refundHandleDTO);
+
+    ElMessage.success(`${handleType}退款成功`);
+    refundHandleDialogVisible.value = false;
+    await getOrderList(); // 刷新订单列表
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(`${refundHandleForm.value.handleResult === 2 ? '同意' : '驳回'}退款失败`);
+      console.error('退款处理失败：', error);
+    }
+  }
+};
+
+// 处理Tab切换事件
 const handleTabClick = () => {
-  // 重置页码为1，避免切换状态后页码超出范围
   pageNum.value = 1;
   getOrderList();
 };
 
-// 发货功能
+// 发货功能（增加退款状态校验：退款中不能发货，对齐后端逻辑）
 const handleShip = async (row) => {
+  // 校验：退款中（refundStatus=1）的订单禁止发货
+  if (row.refundStatus === 1) {
+    ElMessage.error('该订单正在退款中，无法发货');
+    return;
+  }
+
   try {
     await ElMessageBox.confirm(
         `确认发货吗？\n订单号：${row.orderNo}\n商品：${row.goodsName}`,
@@ -147,11 +232,10 @@ const handleShip = async (row) => {
         }
     );
 
-    await updateOrderStatusService(row.id, 3);
+    await sendOrderService(row.id); // 3-待收货（PENDING_RECEIVE）
     ElMessage.success('发货成功，等待买家确认收货');
     await getOrderList();
   } catch (error) {
-    // 区分用户取消和实际错误
     if (error !== 'cancel') {
       ElMessage.error('发货失败');
     }
@@ -162,16 +246,50 @@ const handleShip = async (row) => {
 onMounted(async () => {
   await getUserInfo();
 
-  // 从路由参数获取状态筛选条件
   const statusFromQuery = route.query.status;
   if (statusFromQuery !== undefined && statusFromQuery !== null && statusFromQuery !== '') {
     const parsedStatus = Number(statusFromQuery);
-    if (!isNaN(parsedStatus) && parsedStatus >= 1 && parsedStatus <= 5) {
+    if (!isNaN(parsedStatus) && parsedStatus >= 1 && parsedStatus <= 5) { // 仅包含订单状态枚举值
       orderStatus.value = String(parsedStatus);
     }
   }
   await getOrderList();
 });
+
+// 跳转到商品详情
+const goToDetail = (id) => {
+  const targetUrl = `${window.location.origin}/goods/detail/${id}`;
+  window.open(targetUrl, '_blank');
+}
+
+
+// 发起聊天（聊一聊按钮点击事件）
+const startChat = async (sellerId) => {
+
+  // 2. 获取卖家ID
+  const receiverId = sellerId;
+  if (!receiverId) {
+    ElMessage.error('获取卖家信息失败，无法发起聊天');
+    return;
+  }
+
+  try {
+    // 3. 调用创建会话接口（无则创建，有则返回已有会话）
+    const res = await createChatSessionService(receiverId);
+    const sessionId = res.data.id;
+
+    // 4. 关闭loading并跳转到聊天页面
+    ElMessage.closeAll();
+    await router.push({
+      path: '/homes/notice',
+      query: { sessionId } // 携带会话ID
+    });
+  } catch (error) {
+    ElMessage.closeAll();
+    console.error('创建聊天会话失败:', error);
+    ElMessage.error('发起聊天失败，请稍后重试');
+  }
+};
 </script>
 
 <template>
@@ -181,7 +299,7 @@ onMounted(async () => {
       <span class="page-title">我卖出的</span>
     </div>
 
-    <!-- 顶部状态Tab栏 -->
+    <!-- 顶部状态Tab栏（仅显示订单状态，退款状态是附加属性） -->
     <el-tabs v-model="orderStatus" class="status-tabs" @tab-click="handleTabClick">
       <el-tab-pane
           v-for="item in orderStatusOptions"
@@ -191,27 +309,39 @@ onMounted(async () => {
       />
     </el-tabs>
 
-    <!-- 订单列表卡片区域 - 新增内容容器 -->
+    <!-- 订单列表卡片区域 -->
     <div class="content-wrapper">
       <div class="order-list" v-loading="loading">
         <!-- 空状态 -->
         <el-empty v-if="orderList.length === 0 && !loading" description="暂无订单记录" />
 
-        <!-- 订单卡片循环 -->
+        <!-- 订单卡片循环（使用后端返回的OrderVO字段） -->
         <div class="order-card" v-for="order in orderList" :key="order.id">
-          <!-- 卡片头部：买家信息 + 订单状态 -->
+          <!-- 卡片头部：买家信息 + 订单状态 + 退款状态 -->
           <div class="order-card-header">
             <div class="buyer-info">
-              <el-avatar :size="24" :src="order.buyerAvatar" v-if="order.buyerAvatar" />
+              <el-avatar :size="24" :src="order.buyerPic" v-if="order.buyerPic" />
               <el-avatar :size="24" v-else>{{ order.buyerNickname?.charAt(0) || '买' }}</el-avatar>
               <span class="buyer-name">{{ order.buyerNickname }}</span>
             </div>
-            <span class="order-status-text" :class="getStatusClass(order.orderStatus)">
-              {{ order.orderStatusName }}
-            </span>
+            <div class="status-group">
+              <!-- 订单状态：直接使用后端返回的orderStatusName -->
+              <span class="order-status-text" :class="getStatusClass(order.orderStatus)">
+                {{ order.orderStatusName }}
+              </span>
+              <!-- 退款状态：直接使用后端返回的refundStatusName，仅非无退款时显示 -->
+              <el-tag
+                  v-if="order.refundStatus !== undefined && order.refundStatus !== 0"
+                  size="small"
+                  :type="getRefundTagType(order.refundStatus)"
+                  class="refund-status-tag"
+              >
+                {{ order.refundStatusName }}
+              </el-tag>
+            </div>
           </div>
 
-          <!-- 商品信息区域 -->
+          <!-- 商品信息区域（使用OrderVO的商品字段） -->
           <div class="goods-content" @click="showOrderDetail(order)">
             <img :src="order.goodsPic" class="goods-cover" alt="商品图片" v-if="order.goodsPic" />
             <div class="goods-info">
@@ -222,18 +352,41 @@ onMounted(async () => {
 
           <!-- 操作按钮区域 -->
           <div class="order-action-bar">
-            <!-- 联系买家按钮 - 空置无功能 -->
-            <el-button size="small" class="action-btn">联系买家</el-button>
+            <!-- 联系买家按钮 -->
+            <el-button size="small" class="action-btn" @click="startChat(order.buyerId)">联系买家</el-button>
 
             <!-- 核心操作按钮 -->
             <el-button size="small" class="action-btn primary" @click="showOrderDetail(order)">详情</el-button>
+            <!-- 发货按钮：仅待发货且无退款时显示 -->
             <el-button
                 size="small"
                 class="action-btn primary"
                 @click="handleShip(order)"
-                v-if="order.orderStatus === 2"
+                v-if="order.orderStatus === 2 && (order.refundStatus === undefined || order.refundStatus !== 2)"
             >
               发货
+            </el-button>
+
+            <!-- 退款处理按钮：仅退款中（refundStatus=1）时显示 -->
+            <el-button
+                size="small"
+                class="action-btn primary"
+                type="danger"
+                @click="openRefundHandleDialog(order)"
+                v-if="order.refundStatus === 1"
+            >
+              处理退款
+            </el-button>
+
+            <!-- 已处理退款状态显示：直接使用后端返回的refundStatusName -->
+            <el-button
+                size="small"
+                class="action-btn"
+                disabled
+                :type="getRefundTagType(order.refundStatus)"
+                v-else-if="order.refundStatus !== undefined && order.refundStatus !== 0 && order.refundStatus !== 1"
+            >
+              {{ order.refundStatusName }}
             </el-button>
           </div>
         </div>
@@ -254,7 +407,7 @@ onMounted(async () => {
       />
     </div>
 
-    <!-- 订单详情弹窗 -->
+    <!-- 订单详情弹窗（展示完整的订单信息） -->
     <el-dialog v-model="dialogVisible" title="订单详情" width="700px" destroy-on-close>
       <div v-loading="detailLoading" class="order-detail-content">
         <el-descriptions :column="2" border>
@@ -266,11 +419,23 @@ onMounted(async () => {
               {{ orderDetail.orderStatusName }}
             </el-tag>
           </el-descriptions-item>
+          <!-- 退款状态：使用后端返回的名称 -->
+          <el-descriptions-item label="退款状态" v-if="orderDetail.refundStatus !== undefined">
+            <el-tag :type="getRefundTagType(orderDetail.refundStatus)">
+              {{ orderDetail.refundStatusName }}
+            </el-tag>
+          </el-descriptions-item>
           <el-descriptions-item label="订单金额">
             <span class="amount">¥{{ orderDetail.totalAmount }}</span>
           </el-descriptions-item>
+          <el-descriptions-item label="支付方式">
+            {{ orderDetail.payTypeName || '未支付' }}
+          </el-descriptions-item>
           <el-descriptions-item label="买家">
             {{ orderDetail.buyerNickname || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="买家电话">
+            {{ orderDetail.buyerPhone || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="创建时间" :span="2">
             {{ orderDetail.createTime ? orderDetail.createTime.replace('T', ' ').substring(0, 19) : '-' }}
@@ -286,6 +451,22 @@ onMounted(async () => {
           </el-descriptions-item>
           <el-descriptions-item label="取消时间" :span="2">
             {{ orderDetail.cancelTime ? orderDetail.cancelTime.replace('T', ' ').substring(0, 19) : '-' }}
+          </el-descriptions-item>
+          <!-- 退款相关字段 -->
+          <el-descriptions-item label="退款金额" :span="2" v-if="orderDetail.refundAmount">
+            ¥{{ orderDetail.refundAmount || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="退款原因" :span="2" v-if="orderDetail.refundReason">
+            {{ orderDetail.refundReason || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="退款申请时间" :span="2" v-if="orderDetail.refundApplyTime">
+            {{ orderDetail.refundApplyTime ? orderDetail.refundApplyTime.replace('T', ' ').substring(0, 19) : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="退款处理时间" :span="2" v-if="orderDetail.refundHandleTime">
+            {{ orderDetail.refundHandleTime ? orderDetail.refundHandleTime.replace('T', ' ').substring(0, 19) : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="处理备注" :span="2" v-if="orderDetail.refundRemark">
+            {{ orderDetail.refundRemark || '-' }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -306,13 +487,61 @@ onMounted(async () => {
           </el-descriptions-item>
         </el-descriptions>
 
-        <div v-if="orderDetail.remark" class="section-title">备注信息</div>
+        <div v-if="orderDetail.remark" class="section-title">订单备注</div>
         <div v-if="orderDetail.remark" class="remark-content">
           {{ orderDetail.remark }}
         </div>
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 退款处理弹窗（严格对齐后端RefundHandleDTO） -->
+    <el-dialog
+        v-model="refundHandleDialogVisible"
+        title="处理退款申请"
+        width="500px"
+        :close-on-click-modal="false"
+    >
+      <div v-if="currentRefundOrder">
+        <div class="refund-order-info">
+          <p><strong>订单号：</strong>{{ currentRefundOrder.orderNo }}</p>
+          <p><strong>商品：</strong>{{ currentRefundOrder.goodsName }}</p>
+          <p><strong>退款金额：</strong>¥{{ currentRefundOrder.refundAmount || currentRefundOrder.totalAmount }}</p>
+          <p><strong>买家退款原因：</strong>{{ currentRefundOrder.refundReason || '无' }}</p>
+        </div>
+
+        <el-radio-group v-model="refundHandleForm.handleResult" class="refund-radio-group">
+          <el-radio :label="2">同意退款（退款成功）</el-radio>
+          <el-radio :label="3">驳回退款（退款失败）</el-radio>
+        </el-radio-group>
+
+        <!-- 处理备注输入框（驳回时必填） -->
+        <el-form-item
+            label="处理备注"
+            :required="refundHandleForm.handleResult === 3"
+            class="refund-reason-item"
+        >
+          <el-input
+              v-model="refundHandleForm.refundRemark"
+              type="textarea"
+              :rows="4"
+              :placeholder="refundHandleForm.handleResult === 3 ? '请输入驳回退款的理由（必填）' : '请输入处理备注（可选）'"
+              maxlength="200"
+              show-word-limit
+          />
+        </el-form-item>
+      </div>
+
+      <template #footer>
+        <el-button @click="refundHandleDialogVisible = false">取消</el-button>
+        <el-button
+            type="primary"
+            @click="handleRefund"
+        >
+          {{ refundHandleForm.handleResult === 2 ? '同意退款' : '驳回退款' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -324,18 +553,15 @@ onMounted(async () => {
   min-height: 100vh;
   background-color: #f5f5f5;
   box-sizing: border-box;
-  // 核心修改：设置flex垂直布局
   display: flex;
   flex-direction: column;
-  // 移除底部padding，避免分页区域间距问题
 }
 
-// 新增内容容器样式
 .content-wrapper {
-  flex: 1; // 自动填充剩余空间
-  overflow-y: auto; // 内容超出时显示滚动条
-  padding: 0 12px 12px; // 保留左右内边距，底部内边距避免内容贴分页
-  margin-bottom: 8px; // 与分页区域保持间距
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+  margin-bottom: 8px;
 }
 
 // 页面标题
@@ -350,7 +576,7 @@ onMounted(async () => {
   }
 }
 
-// 状态Tab栏（与参考代码样式完全一致）
+// 状态Tab栏
 .status-tabs {
   background: #fff;
   margin-bottom: 12px;
@@ -380,11 +606,6 @@ onMounted(async () => {
   }
 }
 
-// 订单列表容器
-.order-list {
-  // 移除原有padding，移到content-wrapper中
-}
-
 // 订单卡片
 .order-card {
   background: #fff;
@@ -410,6 +631,16 @@ onMounted(async () => {
       font-size: 14px;
       color: #333;
       font-weight: 500;
+    }
+  }
+
+  .status-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .refund-status-tag {
+      margin-left: 8px;
     }
   }
 
@@ -443,7 +674,7 @@ onMounted(async () => {
   }
 }
 
-// 商品内容区域（与参考代码样式完全一致）
+// 商品内容区域
 .goods-content {
   display: flex;
   align-items: flex-start;
@@ -493,7 +724,7 @@ onMounted(async () => {
   }
 }
 
-// 操作按钮栏（与参考代码样式完全一致）
+// 操作按钮栏
 .order-action-bar {
   display: flex;
   align-items: center;
@@ -519,21 +750,30 @@ onMounted(async () => {
         border-color: #ffe033;
       }
     }
+
+    &.el-button--danger {
+      background: #f56c6c;
+      border-color: #f56c6c;
+      color: #fff;
+      &:hover {
+        background: #f78989;
+        border-color: #f78989;
+      }
+    }
   }
 }
 
-// 分页容器（修改样式，固定在底部）
+// 分页容器
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
   padding: 12px 20px;
   background: #fff;
   border-radius: 8px;
-  // 确保在flex布局中靠底
   margin-top: auto;
 }
 
-// 详情页样式（与参考代码样式完全一致）
+// 详情页样式
 .amount {
   color: #ff4400;
   font-weight: bold;
@@ -596,6 +836,37 @@ onMounted(async () => {
     border: 1px solid #ffe58f;
     border-radius: 4px;
     color: #d48806;
+  }
+}
+
+// 退款处理弹窗样式
+.refund-order-info {
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+
+  p {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+}
+
+.refund-radio-group {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 20px;
+
+  :deep(.el-radio) {
+    font-size: 14px;
+  }
+}
+
+.refund-reason-item {
+  margin-bottom: 0;
+
+  :deep(.el-form-item__label) {
+    font-weight: 500;
   }
 }
 

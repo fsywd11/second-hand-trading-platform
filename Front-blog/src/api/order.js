@@ -28,13 +28,13 @@ export const getOrderDetailService = (id) => {
 }
 
 /**
- * 更新订单状态
+ * 支付订单
  * @param {Number} id - 订单ID
- * @param {Number} status - 订单状态（待付款/待发货/已完成等）
+ * @param {Number} status - 订单状态（1待付款/2待发货/3待收货/4已完成/5已取消）
  * @returns {Promise} 响应结果
  */
-export const updateOrderStatusService = (id, status) => {
-    return request.put(`/order/status/${id}/${status}`);
+export const updateOrderStatusService = (id) => {
+    return request.put(`/order/status/${id}`);
 }
 
 /**
@@ -44,6 +44,14 @@ export const updateOrderStatusService = (id, status) => {
  */
 export const cancelOrderService = (id) => {
     return request.put(`/order/cancel/${id}`);
+}
+
+/**
+ * 订单发货
+ * @param {Number} id - 订单ID
+ * */
+export const sendOrderService = (id) => {
+    return request.put(`/order/send/${id}`);
 }
 
 /**
@@ -78,4 +86,10 @@ export const handleRefundService = (refundHandleDTO) => {
 */
 export const deleteOrderService = (id) => {
     return request.delete(`/order/delete/${id}`);
+}
+
+
+//根据订单编号查询某一条订单
+export const findByOrderNoService = (orderNo) => {
+    return request.get(`/order/findByOrderNo/${orderNo}`);
 }

@@ -321,7 +321,7 @@ const staticCategories = ref([
                 :key="idx"
                 @click="handleCategoryItemClick(module.title)"
             >
-              <div class="module-header">
+              <div class="module-header" >
                 <div class="module-title-wrapper">
                   <h3 class="module-title">{{ module.title }} <span class="arrow">➤</span></h3>
                   <span class="module-subtitle">{{ module.subtitle }}</span>
@@ -342,7 +342,7 @@ const staticCategories = ref([
               </div>
               <!-- 推荐模块商品列表 -->
               <div v-else class="module-items">
-                <div class="module-item" v-for="item in module.items" :key="item.id" @click="goToDetail(item.id)">
+                <div class="module-item" v-for="item in module.items" :key="item.id" @click.stop="goToDetail(item.id)">
                   <!-- 核心修改：设置图片默认值，无数据时显示导入的默认图 -->
                   <img
                       :src="item.image || defaultPic"

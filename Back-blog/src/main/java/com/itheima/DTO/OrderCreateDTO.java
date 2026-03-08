@@ -23,4 +23,7 @@ public class OrderCreateDTO {
     private Integer goodsNum = 1; // 商品数量（二手默认1）
 
     private String remark; // 订单备注
+
+    // 新增requestId字段，用于幂等性校验
+    private String requestId;
 }

@@ -4,7 +4,7 @@ import {useRoute, useRouter} from 'vue-router';
 import {ElMessage, ElMessageBox} from 'element-plus';
 import {Check} from '@element-plus/icons-vue';
 import {goodsDetailService} from '@/api/goods.js';
-import {createOrderService, updateOrderStatusService, getOrderListService} from '@/api/order.js';
+import {createOrderService, updateOrderStatusService, getOrderListService, findByOrderNoService} from '@/api/order.js';
 import {addressListService, addressGetDefaultService} from '@/api/address.js';
 import {userInfoServices} from '@/api/user.js';
 import {useTokenStore} from '@/stores/token.js';
@@ -54,6 +54,23 @@ const submitting = ref(false);
 const totalAmount = computed(() => {
   return Number(goodsDetail.value.sellPrice || 0).toFixed(2);
 });
+
+// ========== 新增：生成唯一的requestId ==========
+/**
+ * 生成唯一的requestId（用于幂等性校验）
+ * 格式：时间戳 + 随机数 + 用户ID（如果有）
+ */
+const generateRequestId = () => {
+  // 13位时间戳
+  const timestamp = new Date().getTime();
+  // 6位随机数
+  const random = Math.floor(Math.random() * 900000) + 100000;
+  // 用户ID（增加唯一性）
+  const userId = userInfoStore.info.id || 'guest';
+  // 拼接成唯一ID
+  return `REQ-${userId}-${timestamp}-${random}`;
+};
+
 // 获取用户信息
 const getUserInfo = async () => {
   try {
@@ -114,6 +131,7 @@ const getGoodsDetail = async () => {
     loading.value = false;
   }
 };
+
 // 获取地址列表
 const getAddressList = async () => {
   try {
@@ -202,6 +220,10 @@ const submitOrder = async () => {
   try {
     submitting.value = true;
 
+    // ========== 新增：生成requestId ==========
+    const requestId = generateRequestId();
+    console.log('生成的requestId:', requestId);
+
     // 构建订单创建参数
     const orderData = {
       buyerId: userInfoStore.info.id || 1, // 从用户信息获取买家ID，默认1
@@ -209,10 +231,12 @@ const submitOrder = async () => {
       goodsId: goodsId.value,
       addressId: selectedAddress.value.id,
       goodsNum: goodsDetail.value.stock || 1, // 二手商品默认数量为1
-      remark: remark.value
+      remark: remark.value,
+      // ========== 新增：添加requestId到请求参数 ==========
+      requestId: requestId
     };
 
-    console.log('订单创建参数:', orderData);
+    console.log('订单创建参数(含requestId):', orderData);
 
     const res = await createOrderService(orderData);
 
@@ -234,14 +258,20 @@ const submitOrder = async () => {
         handlePayment(orderNo);
       }).catch(() => {
         // 查看订单
-        router.push('/homes/myBought');
+        const targetUrl = `${window.location.origin}/homes/myBought`;
+        window.open(targetUrl, '_blank')
       });
     } else {
       ElMessage.error(res.message || '订单创建失败');
     }
   } catch (error) {
     console.error('创建订单失败:', error);
-    ElMessage.error(error.message || '订单创建失败，请稍后重试');
+    // ========== 优化：增加幂等性错误提示 ==========
+    if (error.message && error.message.includes('请勿重复提交订单')) {
+      ElMessage.error('请勿重复提交订单，请稍后查看订单状态');
+    } else {
+      ElMessage.error(error.message || '订单创建失败，请稍后重试');
+    }
   } finally {
     submitting.value = false;
   }
@@ -256,16 +286,11 @@ const handlePayment = async (orderNo) => {
   setTimeout(async () => {
     try {
       // 根据订单号查询订单ID
-      const result = await getOrderListService({
-        pageNum: 1,
-        pageSize: 1,
-        orderNo: orderNo
-      });
-
-      const order = result.data?.items?.[0];
+      const result = await findByOrderNoService(orderNo);
+      const order = result.data
       if (order && order.id) {
         // 调用API更新订单状态为待发货(2)
-        await updateOrderStatusService(order.id, 2);
+        await updateOrderStatusService(order.id);
         ElMessage.success('支付成功，订单状态已更新');
       }
     } catch (error) {
@@ -281,7 +306,8 @@ const handlePayment = async (orderNo) => {
           type: 'success'
         }
     ).then(() => {
-      router.push('/homes/myBought');
+      const targetUrl = `${window.location.origin}/homes/myBought`;
+      window.open(targetUrl, '_blank')
     }).catch(() => {
       router.push(`/goods/detail/${goodsId.value}`);
     });
@@ -349,6 +375,7 @@ watch(
 </script>
 
 <template>
+  <!-- 原有模板代码完全不变 -->
   <div class="payment-page">
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
@@ -470,6 +497,7 @@ watch(
 </template>
 
 <style scoped lang="scss">
+/* 原有样式代码完全不变 */
 // 全局样式
 .payment-page {
   padding-top: 100px;
