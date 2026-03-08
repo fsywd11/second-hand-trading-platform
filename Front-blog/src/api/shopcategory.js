@@ -32,7 +32,7 @@ export const shopCategoryDetailService = (id) => {
 
 // 7. 商品分类修改（管理员）
 export const shopCategoryUpdateService = (categoryData) => {
-    return request.put('/shopcategory', categoryData)
+    return request.put('/shopcategory/update', categoryData)
 }
 
 // 8. 商品分类删除（管理员）

@@ -57,7 +57,7 @@ public class ShopCategoryController {
 
     // 修改商品分类信息（管理员）
     @PreAuthorize("/shopcategory/update")
-    @PutMapping
+    @PutMapping("/update")
     public Result update(@RequestBody @Validated(Category.Update.class) Category category) {
         try {
             categoryService.update(category);

@@ -55,43 +55,36 @@
         </if>
     </select>
 
-    <select id="allList" resultType="com.itheima.vo.GoodsVO">
+    <select id="allList" parameterType="com.itheima.DTO.GoodsQueryDTO" resultType="com.itheima.vo.GoodsVO">
         SELECT
         <include refid="Base_Column_List"/>
         FROM goods g
         LEFT JOIN user u ON g.seller_id = u.id
         LEFT JOIN shop_category c ON g.category_id = c.id
         <where>
-            <!-- 商品名称模糊查询 -->
-            <if test="queryDTO.goodsName != null and queryDTO.goodsName != ''">
-                AND g.goods_name LIKE CONCAT('%', #{queryDTO.goodsName}, '%')
+            <if test="goodsName != null and goodsName != ''">
+                AND g.goods_name LIKE CONCAT('%', #{goodsName}, '%')
             </if>
-
-
-            <!-- 商品状态 -->
-            <if test="queryDTO.goodsStatus != null">
-                AND g.goods_status = #{queryDTO.goodsStatus}
+            <if test="categoryId != null and categoryId != 0">
+                AND g.category_id = #{categoryId}
             </if>
-
-            <!-- 新旧程度 -->
-            <if test="queryDTO.isNew != null">
-                AND g.is_new = #{queryDTO.isNew}
+            <if test="goodsStatus != null">
+                AND g.goods_status = #{goodsStatus}
             </if>
-
-            <!-- 价格区间 -->
-            <if test="queryDTO.minPrice != null">
-                AND g.sell_price >= #{queryDTO.minPrice}
+            <if test="isNew != null">
+                AND g.is_new = #{isNew}
             </if>
-            <if test="queryDTO.maxPrice != null">
-                AND g.sell_price &lt;= #{queryDTO.maxPrice}
+            <if test="minPrice != null">
+                AND g.sell_price >= #{minPrice}
             </if>
-
-            <!-- 卖家ID -->
-            <if test="queryDTO.sellerId != null">
-                AND g.seller_id = #{queryDTO.sellerId}
+            <if test="maxPrice != null">
+                AND g.sell_price &lt;= #{maxPrice}
+            </if>
+            <if test="sellerId != null">
+                AND g.seller_id = #{sellerId}
             </if>
         </where>
-        ORDER BY g.create_time DESC
+        ORDER BY g.create_time
     </select>
 
     <update id="update" parameterType="com.itheima.pojo.Goods">
@@ -165,12 +158,19 @@
         LEFT JOIN user u ON g.seller_id = u.id
         LEFT JOIN shop_category c ON g.category_id = c.id
         WHERE g.category_id IN
-        <foreach collection="list" item="cid" open="(" separator="," close=")">
+        <foreach collection="categoryIds" item="cid" open="(" separator="," close=")">
             #{cid}
         </foreach>
         AND g.goods_status = 1
         ORDER BY g.create_time DESC
         LIMIT #{limit}
+    </select>
+
+    <select id="findGoodsImagesByGoodsIds" resultType="com.itheima.pojo.GoodsImage">
+        SELECT * FROM goods_image WHERE goods_id IN
+        <foreach collection="goodsIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
     </select>
 
 </mapper>

@@ -6,13 +6,14 @@ import com.itheima.DTO.GoodsDTO;
 import com.itheima.DTO.GoodsQueryDTO;
 import com.itheima.mapper.*;
 import com.itheima.pojo.*;
+import com.itheima.pojo.Enum.GoodsIsNewEnum;
+import com.itheima.pojo.Enum.GoodsStatusEnum;
 import com.itheima.service.CampusKnowledgeGraphService;
 import com.itheima.service.GoodsService;
 import com.itheima.service.UserService;
 import com.itheima.util.MilvusCollectionUtil;
 import com.itheima.util.MilvusVectorUtil;
 import com.itheima.util.QwenEmbeddingUtil;
-import com.itheima.util.ThreadLocalUtil;
 import com.itheima.vo.BuyerViewSellerVO;
 import com.itheima.vo.GoodsDetailVO;
 import com.itheima.vo.GoodsVO;
@@ -104,6 +105,7 @@ public class GoodsServiceImpl implements GoodsService {
 
     /**
      * 完全替换为默认个性化推荐逻辑，修复父分类ID查询子分类商品+参数绑定问题
+     * 核心修复：严格限定分类范围，前端传分类ID时，所有结果仅返回该分类（含子分类）商品
      */
     @Override
     @Transactional(readOnly = true)
@@ -114,10 +116,7 @@ public class GoodsServiceImpl implements GoodsService {
         Integer pageSize = queryDTO.getPageSize() == null ? 10 : queryDTO.getPageSize();
 
         // 优先从sellerId获取用户ID（兼容我的商品场景），无则视为未登录
-        // 获取当前登录用户（创建人）
-        Map<String, Object> map = ThreadLocalUtil.get();
-        Integer userId = (Integer) map.get("id");
-
+        Integer userId = queryDTO.getSellerId();
         try {
             // ========== 核心修复：处理父分类ID，获取所有子分类ID ==========
             List<Integer> targetChildCategoryIds = new ArrayList<>();
@@ -130,6 +129,7 @@ public class GoodsServiceImpl implements GoodsService {
                     // 若没有子分类，说明传入的是子分类ID，直接使用
                     targetChildCategoryIds.add(queryDTO.getCategoryId());
                 }
+                log.info("处理分类ID完成，目标子分类ID列表：{}", targetChildCategoryIds);
             }
 
             // 2. 未登录/用户ID不合法：返回指定分类下的热门商品
@@ -139,6 +139,7 @@ public class GoodsServiceImpl implements GoodsService {
                 List<GoodsVO> pageGoodsList = getPageData(hotGoodsList, pageNum, pageSize);
                 pb.setTotal((long) hotGoodsList.size());
                 pb.setItems(pageGoodsList);
+                log.info("未登录/用户ID不合法：返回指定分类下的热门商品，分类ID：{}", targetChildCategoryIds);
                 return pb;
             }
 
@@ -150,25 +151,39 @@ public class GoodsServiceImpl implements GoodsService {
                 List<GoodsVO> pageGoodsList = getPageData(hotGoodsList, pageNum, pageSize);
                 pb.setTotal((long) hotGoodsList.size());
                 pb.setItems(pageGoodsList);
+                log.info("用户不存在：返回指定分类下的热门商品，分类ID：{}", targetChildCategoryIds);
                 return pb;
             }
 
-            // 4. 知识图谱层：匹配用户特征对应的商品分类（优先使用前端传入的分类）
+            // 4. 知识图谱层：匹配用户特征对应的商品分类（严格限定在前端传入的分类范围内）
             List<Integer> kgCategoryIds = new ArrayList<>();
             if (!CollectionUtils.isEmpty(targetChildCategoryIds)) {
-                // 前端传入了分类，优先使用该分类
-                kgCategoryIds = targetChildCategoryIds;
+                // 前端传入了分类：知识图谱仅能在该分类范围内匹配（核心修复）
+                List<Integer> userMatchCategoryIds = campusKnowledgeGraphService.matchCategoryByUser(user);
+                // 取交集：仅保留用户感兴趣且属于前端指定分类的ID
+                kgCategoryIds = targetChildCategoryIds.stream()
+                        .filter(userMatchCategoryIds::contains)
+                        .collect(Collectors.toList());
+                // 若交集为空，仍使用前端指定的分类（保证结果不跑偏）
+                if (CollectionUtils.isEmpty(kgCategoryIds)) {
+                    kgCategoryIds = targetChildCategoryIds;
+                }
+                log.info("知识图谱层：前端传分类，匹配用户感兴趣的分类（交集）：{}", kgCategoryIds);
             } else {
                 // 前端未传分类，使用知识图谱匹配的分类
                 kgCategoryIds = campusKnowledgeGraphService.matchCategoryByUser(user);
+                log.info("知识图谱层：前端未传分类，使用知识图谱匹配的分类：{}", kgCategoryIds);
             }
 
+            // 5. 获取知识图谱层匹配的商品（严格限定分类）
             List<GoodsVO> kgGoodsList = new ArrayList<>();
             if (!CollectionUtils.isEmpty(kgCategoryIds)) {
                 kgGoodsList = listByCategoryIds(kgCategoryIds, pageSize * 2);
+                // 二次过滤：确保知识图谱返回的商品100%属于目标分类（兜底）
+                kgGoodsList = filterGoodsByCategoryAndStatus(kgGoodsList, targetChildCategoryIds);
             }
 
-            // 5. 协同过滤层：基于用户特征向量检索相似商品（并过滤指定分类）
+            // 6. 协同过滤层：基于用户特征向量检索相似商品（严格过滤指定分类）
             List<Double> userVector = campusKnowledgeGraphService.generateUserCompositeVector(user);
             List<Long> cfGoodsIds = milvusVectorUtil.searchSimilarGoods(userVector, pageSize * 2);
             List<GoodsVO> cfGoodsList = new ArrayList<>();
@@ -178,24 +193,28 @@ public class GoodsServiceImpl implements GoodsService {
                         .map(Long::intValue)
                         .collect(Collectors.toList());
                 cfGoodsList = goodsMapper.listByIds(goodsIdList);
-                // 过滤仅在售商品 + 过滤指定分类
+                // 严格过滤：仅保留在售 + 属于目标分类的商品（核心）
                 cfGoodsList = filterGoodsByCategoryAndStatus(cfGoodsList, targetChildCategoryIds);
             }
 
-            // 6. 结果融合：去重 + 优先知识图谱推荐
+            // 7. 结果融合：去重 + 优先知识图谱推荐（所有结果已限定分类）
             List<GoodsVO> finalGoodsList = mergeRecommendResults(kgGoodsList, cfGoodsList, pageSize * 2);
 
-            // 7. 分页处理（保持原有分页逻辑）
+            // 8. 最终兜底校验：确保无跨分类商品（终极兜底）
+            finalGoodsList = filterGoodsByCategoryAndStatus(finalGoodsList, targetChildCategoryIds);
+
+            // 9. 分页处理（保持原有分页逻辑）
             List<GoodsVO> pageGoodsList = getPageData(finalGoodsList, pageNum, pageSize);
 
-            // 8. 封装分页结果（和原格式完全一致）
+            // 10. 封装分页结果（和原格式完全一致）
             pb.setTotal((long) finalGoodsList.size());
             pb.setItems(pageGoodsList);
 
+            log.info("个性化推荐完成，最终返回商品数：{}，分类ID：{}", pageGoodsList.size(), targetChildCategoryIds);
             return pb;
         } catch (Exception e) {
-            log.error("个性化推荐失败，用户ID：{}", userId, e);
-            // 异常降级：返回指定分类下的热门商品
+            log.error("个性化推荐失败，用户ID：{}，分类ID：{}", userId, queryDTO.getCategoryId(), e);
+            // 异常降级：返回指定分类下的热门商品（严格限定分类）
             List<Integer> childIds = new ArrayList<>();
             if (queryDTO.getCategoryId() != null && queryDTO.getCategoryId() != 0) {
                 childIds = shopCategoryMapper.listChildCategoryIdsByParentId(queryDTO.getCategoryId());
@@ -438,6 +457,23 @@ public class GoodsServiceImpl implements GoodsService {
         milvusVectorUtil.cleanDirtyVectorData(validGoodsIds);
     }
 
+    @Override
+    public PageBean<GoodsVO> alllist(GoodsQueryDTO queryDTO) {
+        PageBean<GoodsVO> pb = new PageBean<>();
+        PageHelper.startPage(queryDTO.getPageNum(), queryDTO.getPageSize());
+
+        //调用Mapper
+        //直接获取全部的数据
+        List<GoodsVO> as = goodsMapper.allList(queryDTO);
+        //Page中提供了方法，可以获取PageHelper分页查询后，查询的总记录条数和当前页数据
+        Page<GoodsVO> p = (Page<GoodsVO>) as;
+        //Page<>是list<>的一个实现类，是list的子类，所以可以强转
+        //把数据填充到PageBean对象中
+        pb.setTotal(p.getTotal());
+        pb.setItems(p.getResult());
+        return pb;
+    }
+
     // ========== 私有辅助方法 ==========
 
     /**
@@ -471,36 +507,109 @@ public class GoodsServiceImpl implements GoodsService {
 
     /**
      * 过滤商品：仅保留在售 + 指定分类的商品
+     * 优化点：1. 解决N+1查询问题 2. 增加空指针防护 3. 分离数据过滤和数据补充逻辑
      * @param goodsList 原始商品列表
      * @param categoryIds 目标分类ID列表（子ID）
      * @return 过滤后的商品列表
      */
     private List<GoodsVO> filterGoodsByCategoryAndStatus(List<GoodsVO> goodsList, List<Integer> categoryIds) {
+        // 1. 空列表直接返回，避免后续处理
         if (CollectionUtils.isEmpty(goodsList)) {
             return new ArrayList<>();
         }
-        return goodsList.stream()
-                .filter(goods -> goods.getGoodsStatus().equals(GoodsStatusEnum.ON_SALE.getCode()))
+
+        // ========== 第一步：纯内存过滤（无数据库操作） ==========
+        List<GoodsVO> filteredList = goodsList.stream()
+                // 空指针防护：先判空再比较状态
+                .filter(goods -> goods != null
+                        && goods.getGoodsStatus() != null
+                        && goods.getGoodsStatus().equals(GoodsStatusEnum.ON_SALE.getCode()))
+                // 分类过滤：空指针防护 + 分类匹配
                 .filter(goods -> {
-                    // 若无分类限制，直接保留；有则过滤指定分类
+                    // 商品分类ID为空 → 直接过滤（脏数据）
+                    if (goods.getCategoryId() == null) {
+                        return false;
+                    }
+                    // 无分类限制 → 保留
                     if (CollectionUtils.isEmpty(categoryIds)) {
                         return true;
                     }
+                    // 匹配指定分类 → 保留
                     return categoryIds.contains(goods.getCategoryId());
                 })
-                .peek(goods -> {
-                    goods.setIsNewName(GoodsIsNewEnum.getNameByCode(goods.getIsNew()));
-                    goods.setGoodsStatusName(GoodsStatusEnum.getNameByCode(goods.getGoodsStatus()));
-                    goods.setImageList(goodsMapper.findGoodsImagesByGoodsId(goods.getId()));
-                    goods.setCollectCount(goodsCollectMapper.allList(goods.getId()));
-                    // 补充卖家信息
-                    User seller = userMapper.findById(goods.getSellerId());
-                    if (seller != null) {
-                        goods.setSellerNickname(seller.getNickname());
-                        goods.setSellerPic(seller.getUserPic());
-                    }
-                })
                 .collect(Collectors.toList());
+
+        // 过滤后无数据 → 直接返回
+        if (CollectionUtils.isEmpty(filteredList)) {
+            return new ArrayList<>();
+        }
+
+        // ========== 第二步：批量补充数据（解决N+1查询） ==========
+        // 1. 收集需要查询的ID：商品ID + 卖家ID
+        List<Integer> goodsIds = filteredList.stream()
+                .map(GoodsVO::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        Set<Integer> sellerIds = filteredList.stream()
+                .map(GoodsVO::getSellerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // 2. 批量查询商品图片（1次查询替代N次）
+        Map<Integer, List<GoodsImage>> goodsImageMap = new HashMap<>();
+        if (!CollectionUtils.isEmpty(goodsIds)) {
+            List<GoodsImage> allImages = goodsMapper.findGoodsImagesByGoodsIds(goodsIds);
+            // 分组：商品ID → 图片列表
+            goodsImageMap = allImages.stream()
+                    .collect(Collectors.groupingBy(GoodsImage::getGoodsId));
+        }
+
+        // 3. 批量查询卖家信息（1次查询替代N次）
+        Map<Integer, User> sellerMap = new HashMap<>();
+        if (!CollectionUtils.isEmpty(sellerIds)) {
+            List<User> sellers = userMapper.findByIds(new ArrayList<>(sellerIds));
+            // 分组：卖家ID → 卖家信息
+            sellerMap = sellers.stream()
+                    .collect(Collectors.toMap(User::getId, user -> user));
+        }
+
+        // ========== 第三步：填充数据（纯内存操作） ==========
+        Map<Integer, List<GoodsImage>> finalGoodsImageMap = goodsImageMap;
+        Map<Integer, User> finalSellerMap = sellerMap;
+        filteredList.forEach(goods -> {
+            // 填充图片列表（批量查询结果）
+            goods.setImageList(finalGoodsImageMap.getOrDefault(goods.getId(), new ArrayList<>()));
+
+            // 填充收藏数（若需优化，可批量查询收藏数，此处暂保留原逻辑）
+            Integer collectCount = goodsCollectMapper.allList(goods.getId());
+            goods.setCollectCount(collectCount == null ? 0 : collectCount);
+
+            // 填充新旧名称（空指针防护）
+            if (goods.getIsNew() != null) {
+                goods.setIsNewName(GoodsIsNewEnum.getNameByCode(goods.getIsNew()));
+            } else {
+                goods.setIsNewName("未知");
+            }
+
+            // 填充状态名称（空指针防护）
+            if (goods.getGoodsStatus() != null) {
+                goods.setGoodsStatusName(GoodsStatusEnum.getNameByCode(goods.getGoodsStatus()));
+            } else {
+                goods.setGoodsStatusName("未知");
+            }
+
+            // 填充卖家信息（批量查询结果）
+            User seller = finalSellerMap.get(goods.getSellerId());
+            if (seller != null) {
+                goods.setSellerNickname(seller.getNickname());
+                goods.setSellerPic(seller.getUserPic());
+            } else {
+                goods.setSellerNickname("未知卖家");
+                goods.setSellerPic("");
+            }
+        });
+
+        return filteredList;
     }
 
     /**

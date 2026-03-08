@@ -12,10 +12,31 @@ const userInfo = ref({
   // ========== 新增字段 ==========
   major: userInfoStore.info.major || '',       // 专业
   grade: userInfoStore.info.grade || '',       // 年级
-  campusScene: userInfoStore.info.campusScene || '' // 校园场景
+  campusScene: userInfoStore.info.campusScene || '', // 校园场景
+  tags: userInfoStore.info.tags || '' // 用户标签（新增）
 })
 
-// 新增手机号验证规则，同时添加新增字段的校验规则
+// 【核心修改】年级选项改为大一/大二/大三/大四，补充研究生/博士生
+const gradeOptions = [
+  { label: '大一', value: '大一' },
+  { label: '大二', value: '大二' },
+  { label: '大三', value: '大三' },
+  { label: '大四', value: '大四' },
+  { label: '研究生', value: '研究生' },
+  { label: '博士生', value: '博士生' }
+]
+
+const campusSceneOptions = [
+  { label: '图书馆', value: '图书馆' },
+  { label: '教学楼', value: '教学楼' },
+  { label: '宿舍区', value: '宿舍区' },
+  { label: '食堂', value: '食堂' },
+  { label: '快递站', value: '快递站' },
+  { label: '操场/体育馆', value: '操场/体育馆' },
+  { label: '校内商业街', value: '校内商业街' }
+]
+
+// 优化校验规则：调整标签规则（支持逗号分隔多标签）
 const rules = {
   nickname: [
     { required: true, message: '请输入用户昵称', trigger: 'blur' },
@@ -30,18 +51,20 @@ const rules = {
     // 中国大陆手机号正则（支持13/14/15/16/17/18/19开头）
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的11位手机号码', trigger: 'blur' }
   ],
-  // ========== 新增字段校验规则 ==========
+  // ========== 优化字段校验规则 ==========
   major: [
-    { required: true, message: '请输入专业', trigger: 'blur' },
+    { required: true, message: '请输入您的专业', trigger: 'blur' },
     { pattern: /^\S{2,20}$/, message: '专业必须是2-20位的非空字符串', trigger: 'blur' }
   ],
   grade: [
-    { required: true, message: '请输入年级', trigger: 'blur' },
-    { pattern: /^\S{2,10}$/, message: '年级必须是2-10位的非空字符串', trigger: 'blur' }
+    { required: true, message: '请选择您的年级', trigger: 'change' }
   ],
   campusScene: [
-    { required: true, message: '请输入校园场景', trigger: 'blur' },
-    { pattern: /^\S{2,50}$/, message: '校园场景必须是2-50位的非空字符串', trigger: 'blur' }
+    { required: true, message: '请选择常用校园场景', trigger: 'change' }
+  ],
+  tags: [ // 优化：支持逗号分隔多标签，允许中文/英文逗号
+    { required: true, message: '请输入用户标签', trigger: 'blur' },
+    { pattern: /^[\u4e00-\u9fa5a-zA-Z0-9,，]{2,50}$/, message: '标签为2-50位，可输入多个标签用逗号分隔', trigger: 'blur' }
   ]
 }
 
@@ -71,7 +94,8 @@ const updateUserInfoStore = async () => {
       // ========== 新增字段 ==========
       major: userInfo.value.major,
       grade: userInfo.value.grade,
-      campusScene: userInfo.value.campusScene
+      campusScene: userInfo.value.campusScene,
+      tags: userInfo.value.tags // 用户标签（新增）
     }
 
     // 更新 Pinia 状态
@@ -117,30 +141,55 @@ const updateUserInfoStore = async () => {
                 show-word-limit
             ></el-input>
           </el-form-item>
-          <!-- ========== 新增字段表单项 ========== -->
-          <el-form-item label="专业" prop="major">
+          <!-- ========== 优化后的字段表单项 ========== -->
+          <el-form-item label="所学专业" prop="major">
             <el-input
                 v-model="userInfo.major"
-                placeholder="请输入您的专业"
+                placeholder="请输入您的专业（如：计算机科学与技术）"
                 maxlength="20"
                 show-word-limit
             ></el-input>
           </el-form-item>
-          <el-form-item label="年级" prop="grade">
-            <el-input
+          <el-form-item label="所在年级" prop="grade">
+            <el-select
                 v-model="userInfo.grade"
-                placeholder="请输入您的年级（如：2023级）"
-                maxlength="10"
-                show-word-limit
-            ></el-input>
+                placeholder="请选择您的年级"
+                style="width: 100%;"
+            >
+              <el-option
+                  v-for="item in gradeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+              ></el-option>
+            </el-select>
           </el-form-item>
-          <el-form-item label="校园场景" prop="campusScene">
-            <el-input
+          <el-form-item label="常用场景" prop="campusScene">
+            <el-select
                 v-model="userInfo.campusScene"
-                placeholder="请输入校园场景（如：图书馆/教学楼/食堂）"
+                placeholder="请选择常用校园场景"
+                style="width: 100%;"
+            >
+              <el-option
+                  v-for="item in campusSceneOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+              ></el-option>
+            </el-select>
+          </el-form-item>
+          <!-- 用户标签表单项（优化提示） -->
+          <el-form-item label="个人标签" prop="tags">
+            <el-input
+                v-model="userInfo.tags"
+                placeholder="请输入标签（如：考研,二手书,电子产品，多个标签用逗号分隔）"
                 maxlength="50"
                 show-word-limit
-            ></el-input>
+            >
+              <template #suffix>
+                <span style="font-size: 12px; color: #999;">例：考研,二手书,电子产品</span>
+              </template>
+            </el-input>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="updateUserInfoStore">提交修改</el-button>
@@ -156,5 +205,13 @@ const updateUserInfoStore = async () => {
 /* 可选：优化输入框样式 */
 :deep(.el-input__inner) {
   padding: 0 15px;
+}
+/* 优化下拉选择框样式 */
+:deep(.el-select .el-input__inner) {
+  padding: 0 15px;
+}
+/* 标签输入框后缀文字样式 */
+:deep(.el-input__suffix) {
+  right: 10px;
 }
 </style>

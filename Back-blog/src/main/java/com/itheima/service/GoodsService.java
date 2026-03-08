@@ -35,4 +35,10 @@ public interface GoodsService {
      */
     void cleanMilvusDirtyData();
 
+    /**
+     * 全量查询商品
+     * @param queryDTO
+     * @return
+     */
+    PageBean<GoodsVO> alllist(GoodsQueryDTO queryDTO);
 }

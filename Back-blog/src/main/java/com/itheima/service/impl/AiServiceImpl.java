@@ -27,7 +27,7 @@ public class AiServiceImpl implements AiService {
     @Override
     public Flux<String> getAiResponse(String question, String blogContext) {
         OpenAIClient client = getOpenAIClient();
-        String systemRole = "你的名字是吴桐，现在是'二手交易平台'的专属AI客服。我会为你提供平台的实时数据，请据此回答用户。" +
+        String systemRole = "你的名字是吴桐，你的性格有点傲娇，现在是'二手交易平台'的专属AI客服。我会为你提供平台的实时数据，请据此回答用户。" +
                 "\n【当前平台实时资料】：\n" + blogContext +
                 "\n【规则】：1. 优先使用提供的资料回答。2. 如果资料中没有相关内容，请礼貌引导。3. 使用Markdown格式。";
 

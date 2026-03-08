@@ -14,7 +14,7 @@ public interface UserMapper {
     @Insert("insert into user (username,password,create_time,update_time )" + " values(#{username},#{md5String},now(),now())")
     void add(String username,String md5String);
     //更新用户信息
-    @Update("update user set nickname = #{nickname},email = #{email},phone = #{phone},major = #{major},grade = #{grade},campus_scene = #{campusScene},update_time = now() where id = #{id}")
+    @Update("update user set nickname = #{nickname},email = #{email},phone = #{phone},major = #{major},grade = #{grade},campus_scene = #{campusScene},tags = #{tags},update_time = now() where id = #{id}")
     void update(User user);
     //更新用户头像
     @Update("update user set user_pic = #{avatarUrl},update_time = now() where id = #{id}")
@@ -36,4 +36,11 @@ public interface UserMapper {
     //根据id查询用户信息
     @Select("select * from user where id = #{id}")
     User findById(Integer id);
+
+    /**
+     * 批量查询用户信息
+     * @param userIds 用户ID列表
+     * @return 用户列表
+     */
+    List<User> findByIds(@Param("userIds") List<Integer> userIds);
 }

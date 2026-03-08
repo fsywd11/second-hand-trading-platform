@@ -7,12 +7,13 @@ import Footer from "@/components/footer.vue";
 import defaultPic from '@/assets/【哲风壁纸】我妻善逸-鬼灭之刃.png'
 // 引入推荐商品API
 import { goodsRecommendByKeywordService } from '@/api/goods.js'
-
+import useUserInfoStore from '@/stores/userInfo.js'
 const router = useRouter()
 const goodsStore = useGoodsStore()
-
+const userInfoStore = useUserInfoStore();
 // 筛选条件
 const queryParams = ref({
+  sellerId: userInfoStore.info.id || null,
   pageNum: 1,
   pageSize: 24,
   categoryId: null, // 分类ID
@@ -318,6 +319,7 @@ const staticCategories = ref([
                 :class="module.color"
                 v-for="(module, idx) in moduleData"
                 :key="idx"
+                @click="handleCategoryItemClick(module.title)"
             >
               <div class="module-header">
                 <div class="module-title-wrapper">
@@ -761,6 +763,7 @@ const staticCategories = ref([
     box-sizing: border-box;
     &:hover {
       transform: translateY(-2px);
+      cursor: pointer;
     }
 
     .module-header {

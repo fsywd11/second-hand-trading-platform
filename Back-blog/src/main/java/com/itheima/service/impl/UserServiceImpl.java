@@ -9,6 +9,7 @@ import com.itheima.pojo.User;
 import com.itheima.service.UserService;
 import com.itheima.util.Md5Util;
 import com.itheima.util.ThreadLocalUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import java.util.Map;
 
 //明确地表示该类是一个服务类，用于处理业务逻辑
 @Service
+@Slf4j
 public class UserServiceImpl implements UserService {
 
 
@@ -70,6 +72,7 @@ public class UserServiceImpl implements UserService {
     public void updatePwd(String newPwd) {
         Map<String,Object> map = ThreadLocalUtil.get();
         Integer id = (Integer)map.get("id");
+        log.info("id:{}",id);
         userMapper.updatePwd(Md5Util.getMD5String(newPwd),id);
     }
 

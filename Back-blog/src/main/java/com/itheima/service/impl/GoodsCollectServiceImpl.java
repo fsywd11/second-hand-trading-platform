@@ -3,6 +3,8 @@ package com.itheima.service.impl;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.itheima.mapper.GoodsCollectMapper;
+import com.itheima.pojo.Enum.GoodsIsNewEnum;
+import com.itheima.pojo.Enum.GoodsStatusEnum;
 import com.itheima.pojo.GoodsCollect;
 import com.itheima.pojo.PageBean;
 import com.itheima.service.GoodsCollectService;
@@ -58,8 +60,8 @@ public class GoodsCollectServiceImpl implements GoodsCollectService {
 
         // 补充枚举名称（新旧程度/商品状态）
         goodsList.forEach(goods -> {
-            goods.setIsNewName(com.itheima.pojo.GoodsIsNewEnum.getNameByCode(goods.getIsNew()));
-            goods.setGoodsStatusName(com.itheima.pojo.GoodsStatusEnum.getNameByCode(goods.getGoodsStatus()));
+            goods.setIsNewName(GoodsIsNewEnum.getNameByCode(goods.getIsNew()));
+            goods.setGoodsStatusName(GoodsStatusEnum.getNameByCode(goods.getGoodsStatus()));
         });
 
         pb.setTotal(p.getTotal());

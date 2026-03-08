@@ -3,6 +3,7 @@ package com.itheima.mapper;
 import com.itheima.DTO.GoodsQueryDTO;
 import com.itheima.pojo.Goods;
 import com.itheima.pojo.GoodsImage;
+import com.itheima.pojo.PageBean;
 import com.itheima.vo.BuyerViewSellerVO;
 import com.itheima.vo.GoodsVO;
 import org.apache.ibatis.annotations.*;
@@ -90,4 +91,11 @@ public interface GoodsMapper {
      */
     List<GoodsVO> allList(GoodsQueryDTO queryDTO);
 
+
+    /**
+     * 批量查询多个商品的图片
+     * @param goodsIds 商品ID列表
+     * @return 图片列表
+     */
+    List<GoodsImage> findGoodsImagesByGoodsIds(@Param("goodsIds") List<Integer> goodsIds);
 }

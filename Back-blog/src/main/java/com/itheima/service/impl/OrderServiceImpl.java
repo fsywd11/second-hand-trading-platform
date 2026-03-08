@@ -11,6 +11,10 @@ import com.itheima.mapper.GoodsMapper;
 import com.itheima.mapper.OrderMapper;
 import com.itheima.mapper.UserMapper;
 import com.itheima.pojo.*;
+import com.itheima.pojo.Enum.GoodsStatusEnum;
+import com.itheima.pojo.Enum.OrderStatusEnum;
+import com.itheima.pojo.Enum.PayTypeEnum;
+import com.itheima.pojo.Enum.RefundStatusEnum;
 import com.itheima.service.OrderService;
 import com.itheima.vo.OrderDetailVO;
 import com.itheima.vo.OrderVO;
@@ -299,9 +303,10 @@ public class OrderServiceImpl implements OrderService {
             throw new RuntimeException("订单不存在：" + orderId);
         }
 
-        // 校验退款状态（只能对“无退款”的订单申请）
+        // 校验退款状态（只能对"无退款"的订单申请）
         if (!Objects.equals(orderInfo.getRefundStatus(), RefundStatusEnum.NO_REFUND.getCode())) {
-            throw new RuntimeException("当前订单已申请退款，无需重复申请");
+            String refundStatusName = RefundStatusEnum.getNameByCode(orderInfo.getRefundStatus());
+            throw new RuntimeException("当前订单已申请退款，状态：" + refundStatusName + "，无需重复申请");
         }
 
         // 校验订单状态（只能对已支付、待发货、待收货、已完成的订单申请退款）

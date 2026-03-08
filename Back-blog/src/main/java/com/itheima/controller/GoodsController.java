@@ -3,8 +3,7 @@ package com.itheima.controller;
 import com.itheima.anno.PreAuthorize;
 import com.itheima.DTO.GoodsDTO;
 import com.itheima.DTO.GoodsQueryDTO;
-import com.itheima.mapper.ShopCategoryMapper;
-import com.itheima.pojo.GoodsStatusEnum;
+import com.itheima.pojo.Enum.GoodsStatusEnum;
 import com.itheima.pojo.PageBean;
 import com.itheima.pojo.Result;
 import com.itheima.service.GoodsService;
@@ -35,9 +34,6 @@ public class GoodsController {
     @Autowired
     private QwenChatUtil qwenChatUtil;
 
-    @Autowired
-    private ShopCategoryService shopCategoryService;
-
     // 添加商品
     @PreAuthorize("/goods/add")
     @PostMapping("/add")
@@ -58,7 +54,7 @@ public class GoodsController {
     @Operation(summary = "分页查询商品", description = "多条件筛选二手商品（后台管理）")
     public Result<PageBean<GoodsVO>> list(@RequestBody GoodsQueryDTO queryDTO) {
         try {
-            PageBean<GoodsVO> pb = goodsService.list(queryDTO);
+            PageBean<GoodsVO> pb = goodsService.alllist(queryDTO);
             return Result.success(pb);
         } catch (Exception e) {
             log.error("分页查询商品失败", e);
@@ -184,7 +180,7 @@ public class GoodsController {
                 return Result.error("用户未登录");
             }
             queryDTO.setSellerId(userId);
-            PageBean<GoodsVO> pb = goodsService.list(queryDTO);
+            PageBean<GoodsVO> pb = goodsService.alllist(queryDTO);
             return Result.success(pb);
         } catch (Exception e) {
             log.error("查询我的商品列表失败", e);

@@ -6,7 +6,7 @@ import com.itheima.DTO.AddressDTO;
 import com.itheima.DTO.AddressQueryDTO;
 import com.itheima.mapper.AddressMapper;
 import com.itheima.pojo.Address;
-import com.itheima.pojo.AddressDefaultEnum;
+import com.itheima.pojo.Enum.AddressDefaultEnum;
 import com.itheima.pojo.PageBean;
 import com.itheima.service.AddressService;
 import com.itheima.util.ThreadLocalUtil;

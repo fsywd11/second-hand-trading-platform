@@ -506,7 +506,7 @@ onMounted(async () => {
 .goods-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, 240px); // 固定列宽
-  gap: 24px;
+  gap: 20px;
   padding-bottom: 40px;
   flex: 1;
   align-content: flex-start;

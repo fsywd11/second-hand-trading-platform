@@ -33,7 +33,8 @@ public class WebConfig implements WebMvcConfigurer {
             "/goods/rag/search",
             "/v3/api-docs/**",
             "/swagger-resources/**",
-            "/webjars/**"
+            "/webjars/**",
+            "/goods/recommend/byKeyword"
     };
 
     // 构造器注入（推荐），避免@Autowired的潜在问题

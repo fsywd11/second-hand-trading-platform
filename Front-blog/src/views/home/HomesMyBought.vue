@@ -1,13 +1,14 @@
 <script setup lang="js">
 import { ref, onMounted} from 'vue'
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox, ElForm, ElFormItem, ElInput, ElInputNumber, ElDialog } from "element-plus";
 import { useRoute, useRouter } from 'vue-router';
 import {
   getOrderListService,
   getOrderDetailService,
   cancelOrderService,
   confirmReceiveOrderService,
-  updateOrderStatusService
+  updateOrderStatusService,
+  applyRefundService // 导入退款申请接口
 } from "@/api/order.js";
 import useUserInfoStore from '@/stores/userInfo.js';
 import {userInfoServices} from '@/api/user.js';
@@ -67,6 +68,18 @@ const getStatusClass = (status) => {
     5: 'status-closed'
   };
   return map[status] || 'status-default';
+};
+
+// 退款状态文本映射（根据实际业务调整）
+const getRefundStatusText = (refundStatus) => {
+  const map = {
+    0: '未申请退款',
+    1: '退款审核中',
+    2: '退款成功',
+    3: '退款驳回',
+    4: '退款处理中'
+  };
+  return map[refundStatus] || '退款中';
 };
 
 // 获取订单列表
@@ -197,6 +210,113 @@ const handleConfirmReceive = async (row) => {
   }
 };
 
+// 退款申请相关逻辑
+const refundDialogVisible = ref(false);
+const refundLoading = ref(false);
+const currentRefundOrder = ref(null);
+const refundForm = ref({
+  refundAmount: 0,
+  refundReason: ''
+});
+const refundFormRules = {
+  refundAmount: [
+    { required: true, message: '请输入退款金额', trigger: 'blur' },
+    { type: 'number', min: 0.01, message: '退款金额必须大于0', trigger: 'blur' }
+  ],
+  refundReason: [
+    { required: true, message: '请填写退款原因', trigger: 'blur' },
+    { min: 5, max: 200, message: '退款原因长度在5-200个字符之间', trigger: 'blur' }
+  ]
+};
+
+// 声明表单引用（解决TS报错）
+const refundFormRef = ref(null);
+
+// 打开退款申请弹窗（增加退款状态校验）
+const openRefundDialog = (row) => {
+  // 前置校验：如果已申请退款，提示用户并返回
+  if (row.refundStatus !== undefined && row.refundStatus !== 0) {
+    ElMessage.info(`该订单${getRefundStatusText(row.refundStatus)}，无法重复申请`);
+    // 引导用户查看详情
+    showOrderDetail(row);
+    return;
+  }
+
+  currentRefundOrder.value = row;
+  refundForm.value = {
+    refundAmount: row.totalAmount,
+    refundReason: ''
+  };
+  refundDialogVisible.value = true;
+};
+
+// 提交退款申请
+const submitRefundApply = async () => {
+  // 手动校验表单（解决TS报错）
+  if (refundFormRef.value) {
+    try {
+      await refundFormRef.value.validate();
+    } catch (error) {
+      ElMessage.error('请填写完整的退款信息');
+      return;
+    }
+  }
+
+  // 基础验证
+  if (!refundForm.value.refundAmount || refundForm.value.refundAmount <= 0) {
+    ElMessage.error('请输入有效的退款金额');
+    return;
+  }
+
+  if (refundForm.value.refundAmount > currentRefundOrder.value.totalAmount) {
+    ElMessage.error(`退款金额不能超过订单总额 ¥${currentRefundOrder.value.totalAmount}`);
+    return;
+  }
+
+  if (!refundForm.value.refundReason.trim()) {
+    ElMessage.error('请填写退款原因');
+    return;
+  }
+
+  try {
+    // 二次确认
+    await ElMessageBox.confirm(
+        `确认申请退款吗？\n订单号：${currentRefundOrder.value.orderNo}\n退款金额：¥${refundForm.value.refundAmount}\n退款原因：${refundForm.value.refundReason}`,
+        '退款申请确认',
+        {
+          confirmButtonText: '确认申请',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+    );
+
+    refundLoading.value = true;
+
+    // 构造退款申请参数
+    const refundApplyDTO = {
+      orderId: currentRefundOrder.value.id,
+      orderNo: currentRefundOrder.value.orderNo,
+      buyerId: userInfoStore.info.id,
+      refundAmount: refundForm.value.refundAmount,
+      refundReason: refundForm.value.refundReason
+    };
+
+    // 调用退款申请接口
+    await applyRefundService(refundApplyDTO);
+
+    ElMessage.success('退款申请提交成功，等待卖家处理');
+    refundDialogVisible.value = false;
+    await getOrderList(); // 刷新订单列表
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('退款申请提交失败，请稍后重试');
+      console.error('退款申请失败：', error);
+    }
+  } finally {
+    refundLoading.value = false;
+  }
+};
+
 // 页面初始化
 onMounted(async () => {
   await getUserInfo();
@@ -226,10 +346,11 @@ onMounted(async () => {
           :key="item.value"
           :label="item.label"
           :name="item.value"
-      />
+      >
+      </el-tab-pane>
     </el-tabs>
 
-    <!-- 订单列表卡片区域 - 新增内容容器 -->
+    <!-- 订单列表卡片区域 -->
     <div class="content-wrapper">
       <div class="order-list" v-loading="loading">
         <!-- 空状态 -->
@@ -237,16 +358,27 @@ onMounted(async () => {
 
         <!-- 订单卡片循环 -->
         <div class="order-card" v-for="order in orderList" :key="order.id">
-          <!-- 卡片头部：卖家信息 + 订单状态 -->
+          <!-- 卡片头部：卖家信息 + 订单状态 + 退款状态 -->
           <div class="order-card-header">
             <div class="seller-info">
               <el-avatar :size="24" :src="order.sellerAvatar" v-if="order.sellerAvatar" />
               <el-avatar :size="24" v-else>{{ order.sellerNickname?.charAt(0) || '用' }}</el-avatar>
               <span class="seller-name">{{ order.sellerNickname }}</span>
             </div>
-            <span class="order-status-text" :class="getStatusClass(order.orderStatus)">
-              {{ order.orderStatusName }}
-            </span>
+            <div class="status-group">
+              <span class="order-status-text" :class="getStatusClass(order.orderStatus)">
+                {{ order.orderStatusName }}
+              </span>
+              <!-- 显示退款状态标签 -->
+              <el-tag
+                  v-if="order.refundStatus !== undefined && order.refundStatus !== 0"
+                  size="small"
+                  type="danger"
+                  class="refund-status-tag"
+              >
+                {{ getRefundStatusText(order.refundStatus) }}
+              </el-tag>
+            </div>
           </div>
 
           <!-- 商品信息区域 -->
@@ -260,7 +392,7 @@ onMounted(async () => {
 
           <!-- 操作按钮区域 -->
           <div class="order-action-bar">
-            <!-- 联系卖家按钮 - 空置无功能 -->
+            <!-- 联系卖家按钮 -->
             <el-button size="small" class="action-btn">联系卖家</el-button>
 
             <el-button size="small" class="action-btn" v-if="order.orderStatus === 5">删除订单</el-button>
@@ -269,6 +401,27 @@ onMounted(async () => {
             <el-button size="small" class="action-btn" @click="handlePay(order)" v-if="order.orderStatus === 1">付款</el-button>
             <el-button size="small" class="action-btn" @click="handleCancel(order)" v-if="order.orderStatus === 1">取消订单</el-button>
             <el-button size="small" class="action-btn" @click="handleConfirmReceive(order)" v-if="order.orderStatus === 3">确认收货</el-button>
+
+            <!-- 退款按钮：仅在待发货/待收货状态且未申请退款时显示 -->
+            <el-button
+                size="small"
+                class="action-btn primary"
+                @click="openRefundDialog(order)"
+                v-if="[2, 3].includes(order.orderStatus) && (order.refundStatus === undefined || order.refundStatus === 0)"
+                type="danger"
+            >
+              申请退款
+            </el-button>
+
+            <!-- 已申请退款提示按钮 -->
+            <el-button
+                size="small"
+                class="action-btn"
+                disabled
+                v-else-if="order.refundStatus !== undefined && order.refundStatus !== 0"
+            >
+              {{ getRefundStatusText(order.refundStatus) }}
+            </el-button>
 
             <el-button size="small" class="action-btn primary" @click="showOrderDetail(order)">详情</el-button>
             <el-button size="small" class="action-btn primary">再次购买</el-button>
@@ -289,7 +442,8 @@ onMounted(async () => {
           :total="total"
           @size-change="onSizeChange"
           @current-change="onCurrentChange"
-      />
+      >
+      </el-pagination>
     </div>
 
     <!-- 订单详情弹窗 -->
@@ -302,6 +456,12 @@ onMounted(async () => {
           <el-descriptions-item label="订单状态">
             <el-tag :type="statusTagType(orderDetail.orderStatus)">
               {{ orderDetail.orderStatusName }}
+            </el-tag>
+          </el-descriptions-item>
+          <!-- 详情页显示退款状态 -->
+          <el-descriptions-item label="退款状态" v-if="orderDetail.refundStatus !== undefined">
+            <el-tag :type="orderDetail.refundStatus === 0 ? 'info' : 'danger'">
+              {{ getRefundStatusText(orderDetail.refundStatus) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="订单金额">
@@ -324,6 +484,13 @@ onMounted(async () => {
           </el-descriptions-item>
           <el-descriptions-item label="取消时间" :span="2">
             {{ orderDetail.cancelTime ? orderDetail.cancelTime.replace('T', ' ').substring(0, 19) : '-' }}
+          </el-descriptions-item>
+          <!-- 退款相关时间 -->
+          <el-descriptions-item label="退款申请时间" :span="2" v-if="orderDetail.refundApplyTime">
+            {{ orderDetail.refundApplyTime ? orderDetail.refundApplyTime.replace('T', ' ').substring(0, 19) : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="退款完成时间" :span="2" v-if="orderDetail.refundCompleteTime">
+            {{ orderDetail.refundCompleteTime ? orderDetail.refundCompleteTime.replace('T', ' ').substring(0, 19) : '-' }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -353,6 +520,58 @@ onMounted(async () => {
         <el-button @click="dialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 退款申请弹窗 -->
+    <el-dialog
+        v-model="refundDialogVisible"
+        title="申请退款"
+        width="500px"
+        :close-on-click-modal="false"
+        :before-close="() => { refundLoading.value = false }"
+    >
+      <el-form
+          :model="refundForm"
+          :rules="refundFormRules"
+          ref="refundFormRef"
+          label-width="100px"
+          class="refund-form"
+      >
+        <el-form-item label="订单编号" prop="orderNo">
+          <span>{{ currentRefundOrder?.orderNo || '-' }}</span>
+        </el-form-item>
+        <el-form-item label="订单金额" prop="totalAmount">
+          <span>¥{{ currentRefundOrder?.totalAmount || 0 }}</span>
+        </el-form-item>
+        <el-form-item label="退款金额" prop="refundAmount">
+          <el-input-number
+              v-model="refundForm.refundAmount"
+              :min="0.01"
+              :max="currentRefundOrder?.totalAmount || 0"
+              :precision="2"
+              style="width: 100%;"
+              placeholder="请输入退款金额"
+          />
+        </el-form-item>
+        <el-form-item label="退款原因" prop="refundReason">
+          <el-input
+              v-model="refundForm.refundReason"
+              type="textarea"
+              :rows="4"
+              placeholder="请详细描述退款原因（5-200字）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="refundDialogVisible = false">取消</el-button>
+        <el-button
+            type="primary"
+            @click="submitRefundApply"
+            :loading="refundLoading"
+        >
+          提交申请
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -362,18 +581,15 @@ onMounted(async () => {
   min-height: 100vh;
   background-color: #f5f5f5;
   box-sizing: border-box;
-  // 核心修改：设置flex垂直布局
   display: flex;
   flex-direction: column;
-  // 移除底部padding，避免分页区域间距问题
 }
 
-// 新增内容容器样式
 .content-wrapper {
-  flex: 1; // 自动填充剩余空间
-  overflow-y: auto; // 内容超出时显示滚动条
-  padding: 0 12px 12px; // 保留左右内边距，底部内边距避免内容贴分页
-  margin-bottom: 8px; // 与分页区域保持间距
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+  margin-bottom: 8px;
 }
 
 // 页面标题
@@ -412,11 +628,6 @@ onMounted(async () => {
   }
 }
 
-// 订单列表容器
-.order-list {
-  // 移除原有padding，移到content-wrapper中
-}
-
 // 订单卡片
 .order-card {
   background: #fff;
@@ -441,6 +652,16 @@ onMounted(async () => {
       font-size: 14px;
       color: #333;
       font-weight: 500;
+    }
+  }
+
+  .status-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .refund-status-tag {
+      margin-left: 8px;
     }
   }
 
@@ -541,17 +762,25 @@ onMounted(async () => {
         border-color: #ffe033;
       }
     }
+    &.el-button--danger {
+      background: #f56c6c;
+      border-color: #f56c6c;
+      color: #fff;
+      &:hover {
+        background: #f78989;
+        border-color: #f78989;
+      }
+    }
   }
 }
 
-// 分页容器（修改样式，固定在底部）
+// 分页容器
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
   padding: 12px 20px;
   background: #fff;
   border-radius: 8px;
-  // 确保在flex布局中靠底
   margin-top: auto;
 }
 
@@ -618,6 +847,14 @@ onMounted(async () => {
     border: 1px solid #ffe58f;
     border-radius: 4px;
     color: #d48806;
+  }
+}
+
+// 退款表单样式
+.refund-form {
+  margin-top: 10px;
+  :deep(.el-form-item__content) {
+    line-height: 1.5;
   }
 }
 

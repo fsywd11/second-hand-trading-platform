@@ -287,7 +287,7 @@ const addChildCategory = (parentRow) => {
           </template>
         </el-table-column>
 
-        <el-table-column label="序号" width="80" type="index" align="center" />
+        <el-table-column label="序号" width="80" prop="id" align="center" />
 
         <!-- 分类名称：区分一级/二级，添加层级标识 -->
         <el-table-column label="分类名称" prop="categoryName" min-width="180" align="center" show-overflow-tooltip>
