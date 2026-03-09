@@ -1,6 +1,7 @@
 //导入axios  npm install axios
 import axios from 'axios';
 import {ElMessage} from 'element-plus'
+import useUserInfoStore from '@/stores/userInfo.js'
 //定义一个变量,记录公共的前缀  ,  baseURL
 const baseURL = import.meta.env.VITE_API_BASENET_URL;
 //创建axios实例
@@ -53,6 +54,8 @@ instance.interceptors.response.use(
         if(err.response.status===401){
             const tokenStore = useTokenStore();
             tokenStore.removeToken(); // 清空token
+            const userInfoStore = useUserInfoStore();
+            userInfoStore.removeInfo();
             ElMessage.warning('请先登录！');
             // 可选：跳转到登录页（如果需要）
             // window.location.href = '/login';

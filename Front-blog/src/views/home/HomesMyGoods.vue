@@ -21,7 +21,7 @@ const route = useRoute()
 
 // ========== 响应式数据 ==========
 const pageNum = ref(1)
-const pageSize = ref(12)
+const pageSize = ref(15)
 const total = ref(0)
 const goodsList = ref([])
 // 分类相关数据

@@ -22,7 +22,6 @@ public interface OrderMapper {
     List<OrderVO> list(OrderQueryDTO queryDTO);
 
     // 3. 根据ID查询订单（含退款字段）
-    @Select("SELECT * FROM order_info WHERE id = #{id}")
     OrderInfo findById(Integer id);
 
     // 4. 修改订单（非状态类字段，含退款字段）
@@ -104,4 +103,9 @@ public interface OrderMapper {
     // 12. 根据订单编号查询订单
     @Select("SELECT * FROM order_info WHERE order_no = #{orderNo}")
     OrderVO findByOrderNo(String orderNo);
+
+
+    // 13. 管理员修改订单状态
+    @Update("UPDATE order_info SET order_status = #{orderStatus},update_time=now() WHERE id = #{id}")
+    void adminUpdateStatus(Integer id, Integer orderStatus);
 }

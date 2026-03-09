@@ -364,7 +364,7 @@ const switchImage = (index) => {
                   :preview-src-list="previewImageList"
                   fit="cover"
                   class="main-image-img"
-                  preview-teleported="true"
+                  :preview-teleported="true"
               >
                 <!-- 可选：图片加载失败时的占位 -->
                 <template #error>

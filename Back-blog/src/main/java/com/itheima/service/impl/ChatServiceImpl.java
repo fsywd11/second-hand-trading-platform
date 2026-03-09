@@ -8,7 +8,9 @@ import com.itheima.mapper.ChatSessionMapper;
 import com.itheima.pojo.ChatMessage;
 import com.itheima.pojo.ChatSession;
 import com.itheima.pojo.PageBean;
+import com.itheima.pojo.User;
 import com.itheima.service.ChatService;
+import com.itheima.service.UserService;
 import com.itheima.websocket.WebSocketServer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,9 @@ public class ChatServiceImpl implements ChatService {
     private ChatMessageMapper messageMapper;
     @Autowired
     private WebSocketServer webSocketServer;
+
+    @Autowired
+    private UserService userService;
 
     /**
      * 获取我的聊天列表（核心：补充当前用户的未读数）
@@ -95,6 +100,11 @@ public class ChatServiceImpl implements ChatService {
 
         // 3. 更新会话最后一条消息+未读数
         sessionMapper.updateSessionLastMsg(session.getId(), content, receiverId);
+
+        //通过id获取用户信息
+        User user = userService.getById(senderId);
+        message.setSenderAvatar(user.getUserPic());
+        message.setSenderNickname(user.getNickname());
 
         // 4. WebSocket推送消息给接收者
         webSocketServer.sendToUser(receiverId.toString(), message);

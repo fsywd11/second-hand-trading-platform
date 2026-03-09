@@ -100,7 +100,6 @@ const getOrderList = async () => {
     };
 
     const result = await getOrderListService(params);
-    console.log(result);
     // 后端返回的OrderVO已包含refundStatusName，直接使用
     orderList.value = result.data?.items || [];
     total.value = result.data?.total || 0;
@@ -255,12 +254,6 @@ onMounted(async () => {
   }
   await getOrderList();
 });
-
-// 跳转到商品详情
-const goToDetail = (id) => {
-  const targetUrl = `${window.location.origin}/goods/detail/${id}`;
-  window.open(targetUrl, '_blank');
-}
 
 
 // 发起聊天（聊一聊按钮点击事件）

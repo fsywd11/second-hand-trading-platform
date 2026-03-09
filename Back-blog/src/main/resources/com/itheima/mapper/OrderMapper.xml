@@ -32,6 +32,7 @@
         u1.user_pic as buyerPic,
         o.seller_id as sellerId,
         u2.nickname as sellerNickname,  -- 卖家昵称
+        o.address_id as addressId,
         u2.user_pic as sellerPic,
         o.goods_id as goodsId,
         o.goods_name as goodsName,
@@ -90,6 +91,7 @@
             goods_name as goodsName,
             goods_pic as goodsPic,
             goods_price as goodsPrice,
+            address_id as addressId,
             goods_num as goodsNum,
             total_amount as totalAmount,
             order_status as orderStatus,

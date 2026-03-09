@@ -127,4 +127,13 @@ public class OrderController {
         OrderVO orderVO = orderService.findByOrderNo(orderNo);
         return Result.success(orderVO);
     }
+
+    //管理员修改商品状态
+    @PreAuthorize("/order/adminUpdateStatus/{id}")
+    @PutMapping("/adminUpdateStatus/{id}/{status}")
+    @Operation(summary = "修改商品状态", description = "修改商品状态")
+    public Result adminUpdateStatus(@PathVariable Integer id, @PathVariable Integer status) {
+        orderService.adminUpdateStatus(id, status);
+        return Result.success("修改商品状态成功");
+    }
 }

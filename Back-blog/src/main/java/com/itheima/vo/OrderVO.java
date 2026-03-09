@@ -21,6 +21,9 @@ public class OrderVO implements Serializable {
     private Integer sellerId;
     private String sellerNickname; // 卖家昵称
     private String sellerPic;
+    //实际地址
+    private Integer addressId;
+    private String address;
     // ===== 商品相关字段 =====
     private Integer goodsId;
     private String goodsName;

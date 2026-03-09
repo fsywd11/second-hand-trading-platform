@@ -39,31 +39,31 @@ const campusSceneOptions = [
 // 优化校验规则：调整标签规则（支持逗号分隔多标签）
 const rules = {
   nickname: [
-    { required: true, message: '请输入用户昵称', trigger: 'blur' },
+    { required: false, message: '请输入用户昵称', trigger: 'blur' },
     { pattern: /^\S{2,10}$/, message: '昵称必须是2-10位的非空字符串', trigger: 'blur' }
   ],
   email: [
-    { required: true, message: '请输入用户邮箱', trigger: 'blur' },
+    { required: false, message: '请输入用户邮箱', trigger: 'blur' },
     { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
   ],
   phone: [
-    { required: true, message: '请输入手机号码', trigger: 'blur' },
+    { required: false, message: '请输入手机号码', trigger: 'blur' },
     // 中国大陆手机号正则（支持13/14/15/16/17/18/19开头）
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的11位手机号码', trigger: 'blur' }
   ],
   // ========== 优化字段校验规则 ==========
   major: [
-    { required: true, message: '请输入您的专业', trigger: 'blur' },
+    { required: false, message: '请输入您的专业', trigger: 'blur' },
     { pattern: /^\S{2,20}$/, message: '专业必须是2-20位的非空字符串', trigger: 'blur' }
   ],
   grade: [
-    { required: true, message: '请选择您的年级', trigger: 'change' }
+    { required: false, message: '请选择您的年级', trigger: 'change' }
   ],
   campusScene: [
-    { required: true, message: '请选择常用校园场景', trigger: 'change' }
+    { required: false, message: '请选择常用校园场景', trigger: 'change' }
   ],
   tags: [ // 优化：支持逗号分隔多标签，允许中文/英文逗号
-    { required: true, message: '请输入用户标签', trigger: 'blur' },
+    { required: false, message: '请输入用户标签', trigger: 'blur' },
     { pattern: /^[\u4e00-\u9fa5a-zA-Z0-9,，]{2,50}$/, message: '标签为2-50位，可输入多个标签用逗号分隔', trigger: 'blur' }
   ]
 }

@@ -93,3 +93,8 @@ export const deleteOrderService = (id) => {
 export const findByOrderNoService = (orderNo) => {
     return request.get(`/order/findByOrderNo/${orderNo}`);
 }
+
+//管理员修改商品状态
+export const adminUpdateStatusService = (id, status) => {
+    return request.put(`/order/adminUpdateStatus/${id}/${status}`);
+}

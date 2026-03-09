@@ -7,9 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getOrderListService,
   getOrderDetailService,
-  updateOrderStatusService,
-  cancelOrderService,
-  deleteOrderService
+  deleteOrderService, adminUpdateStatusService
 } from '@/api/order.js'
 
 const route = useRoute()
@@ -97,7 +95,7 @@ const viewOrderDetail = async (row) => {
 // 处理订单状态切换
 const handleStatusChange = async (row) => {
   try {
-    await updateOrderStatusService(row.id, row.orderStatus)
+    await adminUpdateStatusService(row.id, row.orderStatus)
     ElMessage.success('订单状态更新成功')
   } catch (error) {
     ElMessage.error('状态更新失败：' + error.message)

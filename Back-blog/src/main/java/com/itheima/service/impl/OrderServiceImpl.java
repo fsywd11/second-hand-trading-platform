@@ -186,6 +186,10 @@ public class OrderServiceImpl implements OrderService {
             order.setPayTypeName(PayTypeEnum.getNameByCode(order.getPayType()));
             // 退款状态名称（匹配 RefundStatusEnum）
             order.setRefundStatusName(RefundStatusEnum.getNameByCode(order.getRefundStatus()));
+            //根据地址id查询地址
+            Address address = addressMapper.findById(order.getAddressId());
+            String fullAddress = address.getProvince() + address.getCity() + address.getDistrict() + address.getDetailAddr();
+            order.setAddress(fullAddress);
         });
 
         // 3. 封装分页结果
@@ -227,11 +231,18 @@ public class OrderServiceImpl implements OrderService {
             vo.setSellerPhone(seller.getPhone());
         }
         // 3.3 收货地址
+        //根据地址id查询地址
         Address address = addressMapper.findById(orderInfo.getAddressId());
         if (address != null) {
             vo.setAddress(address.getProvince() + address.getCity() + address.getDistrict() + address.getDetailAddr());
+        } else {
+            // 地址不存在时，显示友好提示
+            if (orderInfo.getAddressId() == null) {
+                vo.setAddress("无收货地址信息");
+            } else {
+                vo.setAddress("地址已删除或不存在");
+            }
         }
-
         // 4. 补充枚举名称（仅填充VO已有字段）
         vo.setOrderStatusName(OrderStatusEnum.getNameByCode(orderInfo.getOrderStatus()));
         vo.setPayTypeName(PayTypeEnum.getNameByCode(orderInfo.getPayType()));
@@ -526,6 +537,11 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public OrderVO findByOrderNo(String orderNo) {
         return orderMapper.findByOrderNo(orderNo);
+    }
+
+    @Override
+    public void adminUpdateStatus(Integer id, Integer status) {
+        orderMapper.adminUpdateStatus(id,status);
     }
 
 

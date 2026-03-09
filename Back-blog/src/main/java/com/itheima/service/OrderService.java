@@ -32,4 +32,6 @@ public interface OrderService {
 
     // 根据订单编号查询订单
     OrderVO findByOrderNo(String orderNo);
+
+    void adminUpdateStatus(Integer id, Integer orderStatus);
 }

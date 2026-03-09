@@ -28,7 +28,7 @@ public interface ChatSessionMapper {
      * 根据两个用户ID查询会话（适配user_pair_min/max唯一索引）
      */
     @Select("""
-        SELECT * FROM chat_session 
+        SELECT * FROM chat_session
         WHERE user_pair_min = LEAST(#{userId1}, #{userId2}) 
           AND user_pair_max = GREATEST(#{userId1}, #{userId2})
         AND status = 1

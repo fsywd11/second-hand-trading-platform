@@ -109,6 +109,7 @@ const sendMsg = async () => {
       receiverId,
       content: inputContent.value.trim()
     });
+    console.log("发送消息成功：", res.data);
 
     msgList.value.push(res.data);
     inputContent.value = "";
@@ -140,7 +141,7 @@ const markAsRead = async (sessionId) => {
 
 const initWebSocket = () => {
   if (!userId.value) {
-    console.warn("用户ID为空，无法建立WebSocket连接");
+    //console.warn("用户ID为空，无法建立WebSocket连接");
     return;
   }
 
@@ -244,9 +245,6 @@ const goToSellerDetail=()=>{
         <div class="chat-list">
           <div class="chat-list-header">
             <h2>消息</h2>
-<!--            <div class="header-actions">-->
-<!--              <span class="icon-btn">⚙️</span>-->
-<!--            </div>-->
           </div>
           <div
               v-for="session in chatList"

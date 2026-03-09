@@ -101,4 +101,7 @@ public interface GoodsMapper {
 
     // GoodsMapper中新增
     List<Goods> findAllOnSale(); // 查询所有在售商品，用于初始化库存缓存
+
+    @Select("SELECT goods_name, is_new, sell_price, original_price, stock, goods_status FROM goods WHERE goods_status = 1")
+    List<Goods> listOnSaleGoods();
 }
