@@ -1,0 +1,14 @@
+com\itheima\pojo\Enum\GoodsIsNewEnum.class
+com\itheima\pojo\Enum\AddressDefaultEnum.class
+org\example\trace\util\TraceHashUtil.class
+com\itheima\pojo\Enum\OrderStatusEnum.class
+org\example\trace\model\TraceAnchorInfo.class
+org\example\trace\util\TraceSnapshotFactory.class
+org\example\trace\constant\TraceEntityType.class
+org\example\trace\command\TraceRecordCommand.class
+org\example\trace\model\TraceRecordVO.class
+com\itheima\pojo\Enum\RefundStatusEnum.class
+org\example\trace\model\TraceabilityVO.class
+com\itheima\pojo\Enum\GoodsStatusEnum.class
+com\itheima\pojo\Enum\PayTypeEnum.class
+org\example\trace\support\TraceabilityChainService.class

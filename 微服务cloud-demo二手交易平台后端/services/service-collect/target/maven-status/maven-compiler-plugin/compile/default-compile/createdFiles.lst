@@ -1,0 +1,14 @@
+org\example\collect\properties\CollectProperties.class
+org\example\collect\config\CollectWebConfig.class
+org\example\collect\config\FeignAuthConfig.class
+org\example\collect\exception\GlobalExceptionHandler.class
+org\example\collect\feign\ProductFeignClient.class
+org\example\collect\exception\SentinelBlockHandler.class
+org\example\collect\interceptor\LoginInterceptor.class
+org\example\collect\controller\GoodsCollectController.class
+org\example\collect\mapper\GoodsCollectMapper.class
+org\example\collect\service\GoodsCollectDomainService.class
+org\example\collect\CollectServiceApplication.class
+org\example\collect\util\JwtUtil.class
+org\example\collect\service\impl\GoodsCollectDomainServiceImpl.class
+org\example\collect\util\ThreadLocalUtil.class

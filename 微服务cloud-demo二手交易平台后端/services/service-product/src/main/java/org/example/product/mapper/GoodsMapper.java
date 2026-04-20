@@ -1,0 +1,50 @@
+package org.example.product.mapper;
+
+import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.example.goods.DTO.GoodsQueryDTO;
+import org.example.goods.POJO.Goods;
+import org.example.goods.POJO.GoodsImage;
+import org.example.goods.VO.GoodsVO;
+import org.example.user.VO.BuyerViewSellerVO;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Mapper
+public interface GoodsMapper {
+
+    void insertGoodsImages(@Param("goodsId") Integer goodsId, @Param("imageList") List<GoodsImage> imageList);
+
+    @Delete("delete from goods_image where goods_id = #{goodsId}")
+    void deleteGoodsImagesByGoodsId(Integer goodsId);
+
+    @Select("select * from goods_image where goods_id = #{goodsId} order by id asc")
+    List<GoodsImage> findGoodsImagesByGoodsId(Integer goodsId);
+
+    @Insert("insert into goods (goods_name, goods_desc, goods_pic, category_id, original_price, sell_price, seller_id, goods_status, is_new, stock, create_time, update_time) values (#{goodsName}, #{goodsDesc}, #{goodsPic}, #{categoryId}, #{originalPrice}, #{sellPrice}, #{sellerId}, #{goodsStatus}, #{isNew}, #{stock}, #{createTime}, #{updateTime})")
+    @Options(useGeneratedKeys = true, keyProperty = "id")
+    void add(Goods goods);
+
+    List<GoodsVO> list(@Param("queryDTO") GoodsQueryDTO queryDTO, @Param("categoryIds") List<Integer> categoryIds, @Param("limit") Integer limit);
+
+    @Select("select * from goods where id = #{id}")
+    Goods findById(Integer id);
+
+    void update(Goods goods);
+
+    @Delete("delete from goods where id = #{id}")
+    void delete(Integer id);
+
+    void updateStatus(@Param("id") Integer id, @Param("status") Integer status, @Param("updateTime") LocalDateTime updateTime);
+
+    BuyerViewSellerVO findSellerByUserId(Integer id);
+
+    List<GoodsVO> allList(GoodsQueryDTO queryDTO);
+
+    List<GoodsVO> listByIds(@Param("ids") List<Integer> ids);
+}
