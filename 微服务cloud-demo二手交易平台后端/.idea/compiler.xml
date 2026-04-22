@@ -10,8 +10,8 @@
         <module name="service-product" />
         <module name="service-user" />
         <module name="model" />
-        <module name="service-order" />
         <module name="service-comment" />
+        <module name="service-order" />
         <module name="service-chat" />
         <module name="gateway" />
         <module name="service-collect" />

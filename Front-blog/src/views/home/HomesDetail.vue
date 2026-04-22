@@ -1,6 +1,6 @@
-<script setup lang="js">
+﻿<script setup lang="js">
 import { onMounted, ref, watch, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router'; // 新增useRouter
+import { useRoute, useRouter } from 'vue-router';
 import Footer from "@/components/footer.vue";
 import { ElMessage, ElAvatar, ElTag} from 'element-plus';
 import Comment from "@/components/Comment.vue";
@@ -8,17 +8,16 @@ import { commentList } from "@/api/comment.js";
 import { goodsDetailService, goodsOpenListService, goodsOpenDetailSellerService, goodsTraceService } from "@/api/goods.js";
 import {ArrowLeftBold, ArrowRightBold, ChatDotRound, Shop, Star} from "@element-plus/icons-vue";
 
-// 引入真实的收藏 API
 import { goodsAddCollect, goodsDeleteCollect, goodsListByCollectId } from "@/api/likeCollect.js";
 import {useTokenStore} from "@/stores/token.js";
-// 新增：导入创建会话API
+
 import { createChatSessionService } from "@/api/chat.js";
 
 const loading = ref(false);
 const route = useRoute();
-const router = useRouter(); // 新增router实例
+const router = useRouter();
 const goodsId = ref(Number(route.params.id));
-const isTogglingCollect = ref(false); // 防抖开关，防止频繁点击
+const isTogglingCollect = ref(false); // 防重复点击
 const tokenStore = useTokenStore();
 const createDefaultTraceInfo = () => ({
   traceId: '',
@@ -61,7 +60,7 @@ const traceEventMap = {
   ORDER_STATUS_ADMIN_CHANGED: '后台修改订单状态',
   ORDER_DELETED: '订单删除前存证'
 };
-// 商品详情数据（适配GoodsDetailVO，扩展字段）
+// 商品详情数据
 const goodsDetail = ref({
   id: 0,
   goodsName: '',
@@ -94,7 +93,6 @@ const sellerInfo = ref({
   publishGoodsCount: 0,
 });
 
-// ========== 新增：聊一聊核心方法 ==========
 // 检查登录状态
 const checkLogin = () => {
   if (tokenStore.token === '') {
@@ -104,7 +102,7 @@ const checkLogin = () => {
   return true;
 };
 
-// 发起聊天（聊一聊按钮点击事件）
+// 发起聊天
 const startChat = async () => {
   // 1. 检查登录
   if (!checkLogin()) return;
@@ -117,16 +115,15 @@ const startChat = async () => {
   }
 
   try {
-
-    // 3. 调用创建会话接口（无则创建，有则返回已有会话）
+    // 3. 调用创建会话接口
     const res = await createChatSessionService(receiverId);
     const sessionId = res.data.id;
 
-    // 4. 关闭loading并跳转到聊天页面
+    // 4. 跳转到聊天页面
     ElMessage.closeAll();
     await router.push({
-      path: '/homes/notice', // 假设聊天页面路由为/chat
-      query: { sessionId } // 携带会话ID
+      path: '/homes/notice',
+      query: { sessionId }
     });
   } catch (error) {
     ElMessage.closeAll();
@@ -134,7 +131,6 @@ const startChat = async () => {
     ElMessage.error('发起聊天失败，请稍后重试');
   }
 };
-
 
 // 当前选中的主图索引
 const currentImageIndex = ref(0);
@@ -145,7 +141,7 @@ const loadComments = async () => {
   try {
     const id = route.params.id;
     if (!id || isNaN(id) || id <= 0) {
-      console.error('商品ID不合法:', id);
+      console.error('商品ID不合法', id);
       return;
     }
     const result = await commentList(id);
@@ -245,7 +241,7 @@ async function checkCollectStatus() {
     const res = await goodsListByCollectId(goodsId.value);
     goodsDetail.value.isCollected = res.data.length > 0;
   } catch (error) {
-    console.error('获取收藏状态失败:', error);
+    console.error('获取收藏状态失败', error);
   }
 }
 
@@ -265,7 +261,7 @@ async function getSellerInfo(sellerId) {
 
 const normalizeTraceInfo = (data = {}) => {
   const normalized = Object.assign(createDefaultTraceInfo(), data);
-  normalized.records = Array.isArray(data.records) ? data.records : [];
+  normalized.records = Array.isArray(data.records) ? data.records.slice(0, 1) : [];
   return normalized;
 };
 
@@ -289,8 +285,7 @@ const getGoodsTraceById = async () => {
   }
 };
 
-
-// 真实的收藏/取消收藏逻辑
+// 收藏/取消收藏逻辑
 const toggleCollect = async () => {
   if (isTogglingCollect.value) return; // 防止重复点击
   isTogglingCollect.value = true;
@@ -311,7 +306,7 @@ const toggleCollect = async () => {
     }
   } catch (error) {
     console.error('操作收藏失败:', error);
-    // 拦截未登录错误（以 401 为例，依据你的 request.js 拦截器可能略有不同）
+    // 拦截未登录错误
     if (error.response?.status === 401 || error.code === '401') {
       ElMessage.warning('请先登录后再进行收藏');
     } else {
@@ -338,7 +333,7 @@ const traceStatusType = computed(() => {
 
 const traceStatusText = computed(() => {
   if (!traceInfo.value.traceId) return '未上链';
-  return traceInfo.value.verified ? '校验通过' : '校验异常';
+  return traceInfo.value.verified ? '验证通过' : '验证异常';
 });
 
 const traceAlertType = computed(() => {
@@ -361,15 +356,6 @@ const formatHashPreview = (value) => {
   return value.length > 24 ? `${value.slice(0, 12)}...${value.slice(-8)}` : value;
 };
 
-const formatPayloadJson = (payloadJson) => {
-  if (!payloadJson) return '--';
-  try {
-    return JSON.stringify(JSON.parse(payloadJson), null, 2);
-  } catch (error) {
-    return payloadJson;
-  }
-};
-
 const getVerifyResultText = (flag) => {
   return flag ? '通过' : '异常';
 };
@@ -379,7 +365,7 @@ const getRecordVerifyType = (record) => {
 };
 
 const getRecordVerifyText = (record) => {
-  return record?.blockVerified && record?.previousLinkVerified ? '区块校验通过' : '区块校验异常';
+  return record?.blockVerified && record?.previousLinkVerified ? '区块验证通过' : '区块验证异常';
 };
 
 const openTraceDialog = async () => {
@@ -399,9 +385,6 @@ const goToSellerDetail=(sellerId)=>{
 
 // 立即购买
 const handleBuyNow = () => {
-  // 调试：打印当前商品状态
-  console.log('handleBuyNow - 商品状态:', goodsDetail.value.goodsStatus, '类型:', typeof goodsDetail.value.goodsStatus);
-
   // 检查是否登录
   if (!tokenStore.token) {
     ElMessage.warning('请先登录后再购买');
@@ -409,8 +392,7 @@ const handleBuyNow = () => {
     return;
   }
 
-  // 检查商品是否可购买（状态为 1-在售 才能购买）
-  // 兼容数字和字符串类型
+  // 检查商品是否可购买
   const status = Number(goodsDetail.value.goodsStatus);
   if (status !== 1) {
     const statusMap = {
@@ -424,17 +406,16 @@ const handleBuyNow = () => {
     return;
   }
 
-  // 跳转到支付页面，携带商品ID
+  // 跳转到支付页面
   router.push({
     path: '/payment',
     query: { goodsId: goodsId.value }
   });
 }
 
-// 在formatOriginalPrice计算属性后新增
-// 处理图片预览列表（转为纯URL数组）
+// 处理图片预览列表
 const previewImageList = computed(() => {
-  // 优先使用多图列表，提取imageUrl字段
+  // 优先使用多图列表
   if (goodsDetail.value.imageList && goodsDetail.value.imageList.length) {
     return goodsDetail.value.imageList.map(item => item.imageUrl).filter(Boolean);
   }
@@ -442,7 +423,7 @@ const previewImageList = computed(() => {
   return goodsDetail.value.goodsPic ? [goodsDetail.value.goodsPic] : [];
 });
 
-// 修复switchImage方法的边界处理
+// 切换图片
 const switchImage = (index) => {
   const listLength = goodsDetail.value.imageList?.length || 1;
   if (listLength === 0) return;
@@ -455,7 +436,6 @@ const switchImage = (index) => {
   <div class="goods-detail-container">
     <div class="seller-top-bar">
       <div class="seller-top-left">
-        <!-- 关键修改1：移除 size="32"，添加自定义 class -->
         <ElAvatar :src="sellerInfo.sellerAvatar" class="avatar-32px" />
         <div class="seller-top-info">
           <div class="seller-top-name">
@@ -466,7 +446,7 @@ const switchImage = (index) => {
           </div>
         </div>
       </div>
-      <div class="seller-top-right" @click="goToSellerDetail(sellerInfo.sellerId)"><el-icon><Shop /></el-icon>校园号</div>
+      <div class="seller-top-right" @click="goToSellerDetail(sellerInfo.sellerId)"><el-icon><Shop /></el-icon>店铺主页</div>
     </div>
 
     <el-container>
@@ -494,11 +474,9 @@ const switchImage = (index) => {
                   class="main-image-img"
                   :preview-teleported="true"
               >
-                <!-- 可选：图片加载失败时的占位 -->
                 <template #error>
                   <div class="image-slot">加载失败</div>
                 </template>
-                <!-- 可选：图片加载中时的占位 -->
                 <template #placeholder>
                   <div class="image-slot">加载中...</div>
                 </template>
@@ -534,7 +512,7 @@ const switchImage = (index) => {
               <div class="traceability-head">
                 <div>
                   <div class="traceability-eyebrow">链上溯源</div>
-                  <div class="traceability-title">商品发布、交易与信息修改均已留痕存证</div>
+                  <div class="traceability-title">商品发布、交易与信息修改均已链上存证</div>
                 </div>
                 <el-tag :type="traceStatusType" effect="dark">
                   {{ traceStatusText }}
@@ -542,9 +520,9 @@ const switchImage = (index) => {
               </div>
 
               <div class="traceability-row">
-                <span class="trace-label">溯源编号</span>
+                <span class="trace-label">溯源编码</span>
                 <button class="trace-link" type="button" @click="openTraceDialog">
-                  {{ traceLoading ? '加载中...' : (traceInfo.traceId || '暂无链上编号，点击查看详情') }}
+                  {{ traceLoading ? '加载中...' : (traceInfo.traceId || '暂无链编码，点击查看商品存证信息') }}
                 </button>
               </div>
 
@@ -565,7 +543,7 @@ const switchImage = (index) => {
               </div>
 
               <p class="traceability-message">
-                {{ traceInfo.message || '点击溯源编号查看该商品从发布到交易、修改的完整上链记录。' }}
+                {{ traceInfo.message || '点击链编码可查看该商品的基本存证信息。' }}
               </p>
             </div>
 
@@ -619,7 +597,6 @@ const switchImage = (index) => {
                     </span>
                   </div>
                   <div class="card-seller">
-                    <!-- 关键修改2：移除 :size="16"，添加自定义 class -->
                     <ElAvatar class="avatar-16px" :src="item.sellerAvatar || sellerInfo.sellerAvatar" />
                     <span>{{ item.sellerNickname || sellerInfo.sellerNickname }}</span>
                   </div>
@@ -640,117 +617,49 @@ const switchImage = (index) => {
     </div>
 
     <el-dialog
-      v-model="traceDialogVisible"
-      title="商品链上溯源记录"
-      width="90%"
-      destroy-on-close
-      class="trace-dialog-window"
+        v-model="traceDialogVisible"
+        title="商品链上溯源记录"
+        width="90%"
+        destroy-on-close
+        class="trace-dialog-window"
     >
       <div v-loading="traceLoading" class="trace-dialog">
         <div class="trace-dialog__summary">
           <div class="trace-summary-card">
-            <span class="trace-summary-card__label">溯源编号</span>
+            <span class="trace-summary-card__label">商品链编码</span>
             <span class="trace-summary-card__value trace-code">{{ traceInfo.traceId || '--' }}</span>
           </div>
           <div class="trace-summary-card">
-            <span class="trace-summary-card__label">最新事件</span>
-            <span class="trace-summary-card__value">{{ formatTraceEvent(traceInfo.latestEventType) }}</span>
-            <span class="trace-summary-card__sub">版本 V{{ traceInfo.latestVersion || 0 }}</span>
+            <span class="trace-summary-card__label">商品名称</span>
+            <span class="trace-summary-card__value">{{ goodsDetail.goodsName || '--' }}</span>
           </div>
           <div class="trace-summary-card">
-            <span class="trace-summary-card__label">链上最新数据哈希</span>
-            <span class="trace-summary-card__value trace-code">{{ formatHashPreview(traceInfo.latestPayloadHash) }}</span>
+            <span class="trace-summary-card__label">当前库存</span>
+            <span class="trace-summary-card__value">{{ goodsDetail.stock ?? '--' }}</span>
           </div>
           <div class="trace-summary-card">
-            <span class="trace-summary-card__label">当前商品数据哈希</span>
-            <span class="trace-summary-card__value trace-code">{{ formatHashPreview(traceInfo.currentPayloadHash) }}</span>
+            <span class="trace-summary-card__label">当前售价</span>
+            <span class="trace-summary-card__value">¥{{ formatPrice }}</span>
           </div>
         </div>
-
         <el-alert
-          v-if="traceInfo.message"
-          :title="traceInfo.message"
-          :type="traceAlertType"
-          :closable="false"
-          show-icon
+            :title="traceInfo.traceId ? '该链编码可用于核验商品真伪与原始发布信息' : '该商品当前暂无链编码'"
+            :type="traceInfo.traceId ? 'success' : 'info'"
+            :closable="false"
+            show-icon
         />
-
-        <el-empty v-if="!traceInfo.records.length && !traceLoading" description="暂无链上记录" />
-
-        <div v-else class="trace-records">
-          <div
-            v-for="record in traceInfo.records"
-            :key="`${record.version}-${record.txHash}`"
-            class="trace-record"
-          >
-            <div class="trace-record__marker"></div>
-            <div class="trace-record__content">
-              <div class="trace-record__header">
-                <div>
-                  <div class="trace-record__title">
-                    <span class="trace-version">V{{ record.version }}</span>
-                    <span>{{ formatTraceEvent(record.eventType) }}</span>
-                  </div>
-                  <div class="trace-record__time">{{ formatTraceTime(record.createTime) }}</div>
-                </div>
-                <el-tag :type="getRecordVerifyType(record)" size="small">
-                  {{ getRecordVerifyText(record) }}
-                </el-tag>
-              </div>
-
-              <p class="trace-record__summary">{{ record.summary || '暂无事件摘要' }}</p>
-
-              <div class="trace-record__grid">
-                <div class="trace-item">
-                  <label>业务编号</label>
-                  <span>{{ record.businessNo || '--' }}</span>
-                </div>
-                <div class="trace-item">
-                  <label>操作用户</label>
-                  <span>{{ record.operatorId || '--' }}</span>
-                </div>
-                <div class="trace-item">
-                  <label>来源服务</label>
-                  <span>{{ record.sourceService || '--' }}</span>
-                </div>
-                <div class="trace-item">
-                  <label>交易哈希</label>
-                  <span class="trace-code">{{ record.txHash || '--' }}</span>
-                </div>
-                <div class="trace-item">
-                  <label>区块哈希</label>
-                  <span class="trace-code">{{ record.blockHash || '--' }}</span>
-                </div>
-                <div class="trace-item">
-                  <label>前序区块哈希</label>
-                  <span class="trace-code">{{ record.previousBlockHash || '创世区块' }}</span>
-                </div>
-                <div class="trace-item">
-                  <label>数据哈希</label>
-                  <span class="trace-code">{{ record.payloadHash || '--' }}</span>
-                </div>
-              </div>
-
-              <details class="trace-record__details">
-                <summary>查看链上快照</summary>
-                <pre>{{ formatPayloadJson(record.payloadJson) }}</pre>
-              </details>
-            </div>
-          </div>
-        </div>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <style scoped lang="scss">
-// 新增：自定义头像尺寸样式
 .avatar-32px {
-  --el-avatar-size: 32px; /* 使用 Element Plus 内置 CSS 变量 */
+  --el-avatar-size: 32px;
 }
 
 .avatar-16px {
-  --el-avatar-size: 16px; /* 使用 Element Plus 内置 CSS 变量 */
+  --el-avatar-size: 16px;
 }
 
 .goods-detail-container {
@@ -896,13 +805,11 @@ const switchImage = (index) => {
       overflow: hidden;
       position: relative;
 
-      // 新增：强制图片占满容器
       .main-image-img {
         width: 100%;
         height: 100%;
       }
 
-      // 修复占位插槽样式，确保居中
       .image-slot {
         width: 100%;
         height: 100%;
@@ -919,7 +826,6 @@ const switchImage = (index) => {
         object-fit: cover;
       }
 
-      // 原有样式保持不变
       .image-nav {
         position: absolute;
         top: 50%;
@@ -949,7 +855,6 @@ const switchImage = (index) => {
       }
     }
 
-    // 移动端适配修复
     @media screen and (max-width: 900px) {
       .goods-images {
         width: 100%;
@@ -967,7 +872,7 @@ const switchImage = (index) => {
         .main-image {
           width: 100%;
           height: auto;
-          aspect-ratio: 1/1; // 保持1:1比例，也可以改为固定高度如400px
+          aspect-ratio: 1/1;
 
           .main-image-img {
             width: 100%;
@@ -1625,4 +1530,23 @@ const switchImage = (index) => {
       gap: 20px;
     }
 
-    .o
+    .other-goods-section .other-goods-list {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+
+    .footer-wrapper {
+      margin-top: 20px;
+    }
+
+    .trace-dialog__summary,
+    .trace-record__grid {
+      grid-template-columns: 1fr;
+    }
+
+    .trace-record__header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+}
+</style>

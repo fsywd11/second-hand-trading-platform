@@ -1,0 +1,1 @@
+import{P as a}from"./index-DfS4xEJW.js";const r=()=>a.get("/api/chat/chat/myList"),i=(t,e=1,s=20)=>a.get(`/api/chat/chat/msg/${t}`,{params:{pageNum:e,pageSize:s}}),n=t=>a.post("/api/chat/chat/send",t),h=t=>a.put(`/api/chat/chat/markRead/${t}`),o=t=>a.post(`/api/chat/chat/createSession/${t}`);export{i as a,o as c,r as g,h as m,n as s};

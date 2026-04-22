@@ -9,7 +9,6 @@ import org.example.common.PageBean;
 import org.example.goods.DTO.RefundApplyDTO;
 import org.example.goods.DTO.RefundHandleDTO;
 import org.example.goods.POJO.Goods;
-import org.example.goods.POJO.GoodsImage;
 import org.example.order.DTO.OrderCreateDTO;
 import org.example.order.DTO.OrderQueryDTO;
 import org.example.order.POJO.OrderInfo;
@@ -53,7 +52,7 @@ public class OrderDomainServiceImpl implements OrderDomainService {
     private static final String STOCK_CACHE_KEY = "goods:stock:";
     private static final String ORDER_IDEMPOTENT_KEY = "order:idempotent:";
     private static final String ORDER_SOURCE_SERVICE = "service-order";
-    private static final String GOODS_SOURCE_SERVICE = "service-order";
+
     private static final String EVENT_ORDER_CREATED = "ORDER_CREATED";
     private static final String EVENT_ORDER_PAID = "ORDER_PAID";
     private static final String EVENT_ORDER_SENT = "ORDER_SENT";
@@ -63,16 +62,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
     private static final String EVENT_ORDER_REFUND_HANDLED = "ORDER_REFUND_HANDLED";
     private static final String EVENT_ORDER_STATUS_ADMIN_CHANGED = "ORDER_STATUS_ADMIN_CHANGED";
     private static final String EVENT_ORDER_DELETED = "ORDER_DELETED";
-    private static final String EVENT_GOODS_ORDER_LOCKED = "GOODS_ORDER_LOCKED";
-    private static final String EVENT_GOODS_ORDER_PAID = "GOODS_ORDER_PAID";
-    private static final String EVENT_GOODS_ORDER_SENT = "GOODS_ORDER_SENT";
-    private static final String EVENT_GOODS_OWNERSHIP_TRANSFERRED = "GOODS_OWNERSHIP_TRANSFERRED";
-    private static final String EVENT_GOODS_ORDER_REFUND_APPLIED = "GOODS_ORDER_REFUND_APPLIED";
-    private static final String EVENT_GOODS_ORDER_REFUND_HANDLED = "GOODS_ORDER_REFUND_HANDLED";
-    private static final String EVENT_GOODS_ORDER_ADMIN_CHANGED = "GOODS_ORDER_ADMIN_CHANGED";
-    private static final String EVENT_GOODS_ORDER_DELETED = "GOODS_ORDER_DELETED";
-    private static final String EVENT_GOODS_ORDER_RESTOCKED = "GOODS_ORDER_RESTOCKED";
-
     private final OrderMapper orderMapper;
     private final GoodsMapper goodsMapper;
     private final UserMapper userMapper;
@@ -104,7 +93,7 @@ public class OrderDomainServiceImpl implements OrderDomainService {
             orderCreateDTO.setGoodsNum(1);
         }
         if (orderCreateDTO.getRequestId() == null || orderCreateDTO.getRequestId().isBlank()) {
-            throw new IllegalArgumentException("requestId 不能为空");
+            throw new IllegalArgumentException("requestId不能为空");
         }
 
         String idempotentKey = ORDER_IDEMPOTENT_KEY + orderCreateDTO.getRequestId();
@@ -118,7 +107,7 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         try {
             lockValue = redisDistributedLock.acquireLock(goodsId.toString());
             if (lockValue == null) {
-                throw new IllegalStateException("系统繁忙，请稍后再试");
+                throw new IllegalStateException("系统繁忙，请稍后重试");
             }
 
             Goods goods = goodsMapper.findById(goodsId);
@@ -159,7 +148,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
 
             OrderInfo latestOrder = requireOrder(orderInfo.getId());
             recordOrderEvent(latestOrder, EVENT_ORDER_CREATED, "订单创建并完成快照上链", latestOrder.getBuyerId());
-            recordGoodsEvent(goods, EVENT_GOODS_ORDER_LOCKED, "订单创建后商品库存与状态变更上链", latestOrder.getBuyerId(), latestOrder);
             return latestOrder.getOrderNo();
         } catch (Exception ex) {
             redisTemplate.delete(idempotentKey);
@@ -230,7 +218,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         orderMapper.updateStatus(id, OrderStatusEnum.PENDING_DELIVERY.getCode(), PayTypeEnum.WECHAT.getCode(), now);
         OrderInfo latestOrder = requireOrder(id);
         recordOrderEvent(latestOrder, EVENT_ORDER_PAID, "订单支付状态已上链", latestOrder.getBuyerId());
-        recordGoodsTradeEvent(latestOrder, EVENT_GOODS_ORDER_PAID, "订单支付后交易凭证已同步上链", latestOrder.getBuyerId());
     }
 
     @Override
@@ -240,7 +227,7 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         if (!Arrays.asList(OrderStatusEnum.PENDING_PAY.getCode(), OrderStatusEnum.PENDING_DELIVERY.getCode()).contains(orderInfo.getOrderStatus())) {
             throw new IllegalStateException("当前订单状态不支持取消");
         }
-        restoreStockAndCancel(orderInfo, orderInfo.getBuyerId(), orderInfo.getBuyerId());
+        restoreStockAndCancel(orderInfo, orderInfo.getBuyerId());
     }
 
     @Override
@@ -253,7 +240,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         orderMapper.updateConfirmStatus(id, OrderStatusEnum.COMPLETED.getCode());
         OrderInfo latestOrder = requireOrder(id);
         recordOrderEvent(latestOrder, EVENT_ORDER_RECEIVED, "订单确认收货已上链", latestOrder.getBuyerId());
-        recordGoodsTradeEvent(latestOrder, EVENT_GOODS_OWNERSHIP_TRANSFERRED, "交易完成，商品权属变更已自动上链", latestOrder.getBuyerId());
     }
 
     @Override
@@ -269,7 +255,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
                 LocalDateTime.now());
         OrderInfo latestOrder = requireOrder(orderInfo.getId());
         recordOrderEvent(latestOrder, EVENT_ORDER_REFUND_APPLIED, "订单退款申请已上链", latestOrder.getBuyerId());
-        recordGoodsTradeEvent(latestOrder, EVENT_GOODS_ORDER_REFUND_APPLIED, "订单退款申请已同步到商品链上凭证", latestOrder.getBuyerId());
     }
 
     @Override
@@ -283,9 +268,8 @@ public class OrderDomainServiceImpl implements OrderDomainService {
                 LocalDateTime.now());
         OrderInfo latestOrder = requireOrder(orderInfo.getId());
         recordOrderEvent(latestOrder, EVENT_ORDER_REFUND_HANDLED, "订单退款处理结果已上链", latestOrder.getSellerId());
-        recordGoodsTradeEvent(latestOrder, EVENT_GOODS_ORDER_REFUND_HANDLED, "订单退款处理结果已同步到商品链上凭证", latestOrder.getSellerId());
         if (Objects.equals(refundHandleDTO.getHandleResult(), RefundStatusEnum.REFUND_SUCCESS.getCode())) {
-            restoreStockAndCancel(latestOrder, latestOrder.getSellerId(), latestOrder.getSellerId());
+            restoreStockAndCancel(latestOrder, latestOrder.getSellerId());
         }
     }
 
@@ -295,9 +279,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         OrderInfo orderInfo = requireOrder(id);
         recordOrderEvent(orderInfo, EVENT_ORDER_DELETED, "订单删除前保留链上存证", orderInfo.getBuyerId());
         orderMapper.deleteOrder(id);
-        Goods goods = goodsMapper.findById(orderInfo.getGoodsId());
-        OrderInfo latestRelatedOrder = orderMapper.findLatestByGoodsId(orderInfo.getGoodsId());
-        recordGoodsEvent(goods, EVENT_GOODS_ORDER_DELETED, "订单删除后商品链上关联快照已更新", orderInfo.getBuyerId(), latestRelatedOrder);
     }
 
     @Override
@@ -307,7 +288,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         orderMapper.updateSendStatus(id, OrderStatusEnum.PENDING_RECEIVE.getCode(), now);
         OrderInfo latestOrder = requireOrder(id);
         recordOrderEvent(latestOrder, EVENT_ORDER_SENT, "订单发货状态已上链", latestOrder.getSellerId());
-        recordGoodsTradeEvent(latestOrder, EVENT_GOODS_ORDER_SENT, "订单发货后物流状态已同步上链", latestOrder.getSellerId());
     }
 
     @Override
@@ -322,7 +302,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         orderMapper.adminUpdateStatus(id, orderStatus);
         OrderInfo latestOrder = requireOrder(id);
         recordOrderEvent(latestOrder, EVENT_ORDER_STATUS_ADMIN_CHANGED, "后台修改订单状态已上链", null);
-        recordGoodsTradeEvent(latestOrder, EVENT_GOODS_ORDER_ADMIN_CHANGED, "后台同步修改交易状态，商品链上凭证已更新", null);
     }
 
     @Override
@@ -345,11 +324,11 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         log.info("init stock cache finished, size={}", goodsList.size());
     }
 
-    private void restoreStockAndCancel(OrderInfo orderInfo, Integer orderOperatorId, Integer goodsOperatorId) {
+    private void restoreStockAndCancel(OrderInfo orderInfo, Integer orderOperatorId) {
         Integer goodsId = orderInfo.getGoodsId();
         String lockValue = redisDistributedLock.acquireLock(goodsId.toString());
         if (lockValue == null) {
-            throw new IllegalStateException("系统繁忙，请稍后再试");
+            throw new IllegalStateException("系统繁忙，请稍后重试");
         }
         try {
             orderMapper.updateCancelStatus(orderInfo.getId(), OrderStatusEnum.CANCELED.getCode());
@@ -360,8 +339,6 @@ public class OrderDomainServiceImpl implements OrderDomainService {
                 goods.setUpdateTime(LocalDateTime.now());
                 goodsMapper.update(goods);
                 redisTemplate.opsForValue().set(STOCK_CACHE_KEY + goodsId, goods.getStock(), 1, TimeUnit.HOURS);
-                OrderInfo canceledOrder = requireOrder(orderInfo.getId());
-                recordGoodsEvent(goods, EVENT_GOODS_ORDER_RESTOCKED, "订单取消或退款后商品库存恢复已上链", goodsOperatorId, canceledOrder);
             }
             OrderInfo canceledOrder = requireOrder(orderInfo.getId());
             recordOrderEvent(canceledOrder, EVENT_ORDER_CANCELED, "订单取消状态已上链", orderOperatorId);
@@ -393,71 +370,9 @@ public class OrderDomainServiceImpl implements OrderDomainService {
         traceabilityChainService.recordEvent(command);
     }
 
-    private void recordGoodsEvent(Goods goods, String eventType, String summary, Integer operatorId) {
-        recordGoodsEvent(goods, eventType, summary, operatorId, null);
-    }
-
-    private void recordGoodsEvent(Goods goods, String eventType, String summary, Integer operatorId, OrderInfo relatedOrder) {
-        if (goods == null) {
-            return;
-        }
-        TraceRecordCommand command = new TraceRecordCommand();
-        command.setEntityType(TraceEntityType.GOODS.getCode());
-        command.setEntityId(goods.getId());
-        command.setBusinessNo("GOODS-" + goods.getId());
-        command.setEventType(eventType);
-        command.setOperatorId(operatorId);
-        command.setSourceService(GOODS_SOURCE_SERVICE);
-        command.setSummary(summary);
-        command.setEventTime(resolveGoodsEventTime(goods, relatedOrder));
-        command.setTraceIdPrefix(TraceEntityType.GOODS.getPrefix());
-        command.setSnapshot(TraceSnapshotFactory.buildGoodsSnapshot(
-                goods,
-                resolveGoodsImages(goods.getId()),
-                relatedOrder,
-                relatedOrder == null ? null : resolveOrderTraceId(relatedOrder.getId())
-        ));
-        traceabilityChainService.recordEvent(command);
-    }
-
-    private void recordGoodsTradeEvent(OrderInfo orderInfo, String eventType, String summary, Integer operatorId) {
-        if (orderInfo == null) {
-            return;
-        }
-        Goods goods = goodsMapper.findById(orderInfo.getGoodsId());
-        recordGoodsEvent(goods, eventType, summary, operatorId, orderInfo);
-    }
-
-    private List<GoodsImage> resolveGoodsImages(Integer goodsId) {
-        return goodsMapper.findGoodsImagesByGoodsId(goodsId);
-    }
-
     private String resolveGoodsTraceId(Integer goodsId) {
         TraceAnchorInfo anchorInfo = traceabilityChainService.getAnchorInfo(TraceEntityType.GOODS.getCode(), goodsId);
         return anchorInfo == null ? null : anchorInfo.getTraceId();
-    }
-
-    private String resolveOrderTraceId(Integer orderId) {
-        if (orderId == null) {
-            return null;
-        }
-        TraceAnchorInfo anchorInfo = traceabilityChainService.getAnchorInfo(TraceEntityType.ORDER.getCode(), orderId);
-        return anchorInfo == null ? null : anchorInfo.getTraceId();
-    }
-
-    private LocalDateTime resolveGoodsEventTime(Goods goods, OrderInfo relatedOrder) {
-        if (relatedOrder != null) {
-            if (relatedOrder.getUpdateTime() != null) {
-                return relatedOrder.getUpdateTime();
-            }
-            if (relatedOrder.getCreateTime() != null) {
-                return relatedOrder.getCreateTime();
-            }
-        }
-        if (goods != null && goods.getUpdateTime() != null) {
-            return goods.getUpdateTime();
-        }
-        return LocalDateTime.now();
     }
 
     private LocalDateTime resolveOrderEventTime(OrderInfo orderInfo) {

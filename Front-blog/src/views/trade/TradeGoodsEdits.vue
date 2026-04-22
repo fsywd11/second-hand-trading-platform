@@ -174,6 +174,9 @@ const getGoodsDetail = async () => {
 
 // 封面图选择回调（覆盖式）
 const coverInput = ref(null)
+const openCoverPicker = () => {
+  coverInput.value?.click()
+}
 const handleCoverChange = async (file) => {
   if (!file) return
   const maxSize = 5 * 1024 * 1024 // 5MB
@@ -194,6 +197,9 @@ const handleCoverChange = async (file) => {
       },
       body: formData
     })
+    if (!response.ok) {
+      throw new Error(`upload failed: ${response.status}`)
+    }
     const res = await response.json()
     const url = res.data.url
     coverUrl.value = url
@@ -412,7 +418,7 @@ watch(() => route.query.id, async (newId) => {
             <div class="images-inline-container">
               <div class="img-group">
                 <div class="section-title">封面图</div>
-                <div class="cover-img-box" @click="coverInput.click()">
+                <div class="cover-img-box" @click="openCoverPicker">
                   <img
                       v-if="coverUrl"
                       :src="coverUrl"
@@ -423,11 +429,11 @@ watch(() => route.query.id, async (newId) => {
                     <el-icon><Plus /></el-icon>
                   </div>
                   <input
+                      ref="coverInput"
                       type="file"
                       accept="image/*"
                       class="cover-file-input"
                       @change="handleCoverChange($event.target.files[0])"
-                      ref="coverInput"
                   >
                   <el-icon
                       v-if="coverUrl"

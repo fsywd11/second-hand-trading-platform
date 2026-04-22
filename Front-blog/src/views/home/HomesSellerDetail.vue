@@ -422,6 +422,7 @@ onUnmounted(() => {
 }
 
 .page-wrapper {
+  margin-top: 60px;
   width: 100%;
   min-height: 100vh;
   box-sizing: border-box;

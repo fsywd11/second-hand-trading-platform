@@ -118,6 +118,31 @@ const goToGoodsDetail = (id) => {
   router.push(`/goods/detail/${id}`);
 };
 
+const goToBoughtCertificates = () => {
+  router.push({
+    path: '/homes/myBought',
+    query: { status: 4 }
+  });
+};
+
+const goToSoldCertificates = () => {
+  router.push({
+    path: '/homes/mySold',
+    query: { status: 4 }
+  });
+};
+
+const focusMyGoodsTrace = async () => {
+  activeTab.value = 'baobei';
+  if (myGoods.value.length === 0) {
+    await loadMyGoods();
+  }
+};
+
+const goToPublishWithTrace = () => {
+  router.push('/homes/publish');
+};
+
 // 页面挂载时加载默认数据
 onMounted(() => {
   loadMyGoods(); // 默认加载商品列表
@@ -179,6 +204,42 @@ const uploadUrl = getUploadUrl();
         </div>
       </div>
     </el-dialog>
+
+    <section class="chain-hub">
+      <div class="chain-hub__intro">
+        <div class="chain-hub__badge">
+          <el-icon><Connection /></el-icon>
+          <span>区块链可信凭证</span>
+        </div>
+        <h2>商品发布、交易流转与权属变更已自动上链存证</h2>
+        <p>
+          每件商品发布后会生成唯一溯源编号，订单交易、信息修改和交易完成后的权属变更都会同步写入链上。
+          发生纠纷时，可直接展示链上哈希、交易哈希与完整记录作为可信依据。
+        </p>
+      </div>
+
+      <div class="chain-hub__actions">
+        <button class="chain-action primary" @click="goToBoughtCertificates">查看我买到的链上凭证</button>
+        <button class="chain-action" @click="goToSoldCertificates">查看我卖出的链上凭证</button>
+        <button class="chain-action" @click="focusMyGoodsTrace">查看我的商品溯源</button>
+        <button class="chain-action" @click="goToPublishWithTrace">发布新商品并生成链上编号</button>
+      </div>
+
+      <div class="chain-hub__tips">
+        <div class="chain-tip-card">
+          <strong>可信编号</strong>
+          <span>商品详情页可直接查看溯源编号与完整链上记录。</span>
+        </div>
+        <div class="chain-tip-card">
+          <strong>自动验真</strong>
+          <span>查询时会比对当前数据哈希与链上哈希，识别是否被篡改。</span>
+        </div>
+        <div class="chain-tip-card">
+          <strong>权属变更</strong>
+          <span>交易完成后自动记录买卖双方的权属流转，平台和卖家均无法改写。</span>
+        </div>
+      </div>
+    </section>
 
     <nav class="content-tabs">
       <div
@@ -279,41 +340,55 @@ const uploadUrl = getUploadUrl();
 <style lang="scss" scoped>
 .user-profile-container {
   min-height: calc(100vh - 60px);
-  background-color: #f8f8f8;
+  background:
+    radial-gradient(circle at top left, rgba(255, 224, 130, 0.18), transparent 24%),
+    radial-gradient(circle at top right, rgba(110, 231, 183, 0.14), transparent 26%),
+    linear-gradient(180deg, #f8fafc 0%, #f8f8f8 100%);
+  padding: 20px 20px 28px;
 }
 
 .user-banner {
-  height: 180px;
-  background: linear-gradient(135deg, #fff9e6 0%, #fff2c2 100%);
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: 220px;
+  background: linear-gradient(135deg, #fff9e6 0%, #fff2c2 52%, #fffdf6 100%);
   position: relative;
-  padding: 30px 40px;
+  padding: 36px 40px;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(255, 215, 64, 0.28);
 
   .banner-bg-elements {
     position: absolute;
-    right: 20px;
-    bottom: 0;
-    width: 200px;
-    height: 120px;
-    background-size: contain;
-    background-repeat: no-repeat;
-    opacity: 0.6;
+    right: -30px;
+    top: -20px;
+    width: 280px;
+    height: 280px;
+    opacity: 0.7;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 68%),
+      radial-gradient(circle at 30% 30%, rgba(255,215,64,0.42), rgba(255,215,64,0) 70%);
   }
 
   .user-info-box {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 24px;
     position: relative;
     z-index: 1;
+    min-height: 148px;
 
     .avatar-area {
-      width: 90px;
-      height: 90px;
+      width: 108px;
+      height: 108px;
       border-radius: 50%;
-      border: 3px solid #fff;
+      border: 4px solid rgba(255, 255, 255, 0.96);
       overflow: hidden;
       cursor: pointer;
       position: relative;
+      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.14);
 
       img {
         width: 100%;
@@ -339,37 +414,48 @@ const uploadUrl = getUploadUrl();
     }
 
     .text-area {
+      flex: 1;
+
       .nickname {
-        font-size: 24px;
-        margin: 0 0 10px 0;
-        color: #333;
+        font-size: 34px;
+        margin: 0 0 12px 0;
+        color: #1f2937;
+        line-height: 1.15;
       }
 
       .stats {
-        font-size: 13px;
-        color: #666;
+        font-size: 14px;
+        color: #475569;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
+        padding: 10px 14px;
+        width: fit-content;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.9);
 
         .divider {
-          color: #ddd;
+          color: #cbd5e1;
         }
 
         b {
-          color: #333;
+          color: #1f2937;
         }
       }
     }
 
     .edit-profile-btn {
       margin-left: auto;
-      background: rgba(0, 0, 0, 0.3);
+      align-self: flex-start;
+      background: rgba(15, 23, 42, 0.76);
       color: #fff;
       border: none;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 13px;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
       transition: background-color 0.3s ease;
       backdrop-filter: blur(4px);
@@ -381,14 +467,117 @@ const uploadUrl = getUploadUrl();
   }
 }
 
+.chain-hub {
+  max-width: 1280px;
+  margin: 18px auto 0;
+  padding: 28px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, #fffdf2 0%, #f5fff7 52%, #f2f8ff 100%);
+  border: 1px solid rgba(255, 199, 0, 0.18);
+  box-shadow: 0 20px 42px rgba(15, 23, 42, 0.06);
+
+  .chain-hub__intro {
+    h2 {
+      margin: 14px 0 12px;
+      font-size: 26px;
+      color: #1f2937;
+      line-height: 1.35;
+    }
+
+    p {
+      margin: 0;
+      color: #4b5563;
+      line-height: 1.8;
+      font-size: 14px;
+      max-width: 960px;
+    }
+  }
+
+  .chain-hub__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 199, 0, 0.35);
+    color: #0f8a5f;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .chain-hub__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  .chain-action {
+    border: 1px solid #d6e6dc;
+    background: #fff;
+    color: #1f2937;
+    border-radius: 999px;
+    padding: 11px 18px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+    }
+
+    &.primary {
+      background: linear-gradient(135deg, #ffd84d 0%, #ffef9f 100%);
+      border-color: transparent;
+      font-weight: 700;
+    }
+  }
+
+  .chain-hub__tips {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 22px;
+  }
+
+  .chain-tip-card {
+    padding: 18px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(15, 138, 95, 0.1);
+    box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08);
+
+    strong {
+      display: block;
+      color: #1f2937;
+      margin-bottom: 8px;
+      font-size: 15px;
+    }
+
+    span {
+      color: #6b7280;
+      line-height: 1.7;
+      font-size: 13px;
+    }
+  }
+}
+
 .content-tabs {
+  max-width: 1280px;
+  margin: 18px auto 0;
   display: flex;
+  align-items: center;
+  gap: 8px;
   background-color: #fff;
-  border-bottom: 1px solid #eee;
-  padding: 0 20px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 22px 22px 0 0;
+  padding: 0 18px;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
 
   .tab-item {
-    padding: 15px 20px;
+    padding: 16px 18px;
     font-size: 15px;
     cursor: pointer;
     color: #666;
@@ -409,7 +598,7 @@ const uploadUrl = getUploadUrl();
       transform: translateX(-50%);
       width: 0;
       height: 3px;
-      background: #ffda00;
+      background: linear-gradient(90deg, #ffd43b, #ffb703);
       transition: width 0.3s ease;
     }
 
@@ -429,11 +618,18 @@ const uploadUrl = getUploadUrl();
 }
 
 .content-grid {
-  padding: 20px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 22px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 15px;
+  gap: 18px;
   min-height: 300px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-top: none;
+  border-radius: 0 0 24px 24px;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.05);
 
   // 评论列表特殊样式
   &.comment-grid {
@@ -474,15 +670,16 @@ const uploadUrl = getUploadUrl();
 
   .baobei-card {
     background: #fff;
-    border-radius: 10px;
+    border-radius: 18px;
     overflow: hidden;
-    border: 1px solid #f0f0f0;
+    border: 1px solid #eef2f7;
     transition: all 0.3s ease;
     cursor: pointer;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
 
     &:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+      transform: translateY(-6px);
+      box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
     }
 
     .card-image {
@@ -502,7 +699,7 @@ const uploadUrl = getUploadUrl();
     }
 
     .card-info {
-      padding: 10px;
+      padding: 14px;
 
       .title-wrap {
         font-size: 13px;
@@ -530,7 +727,7 @@ const uploadUrl = getUploadUrl();
       .price-row {
         display: flex;
         align-items: baseline;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
 
         .price-symbol {
           color: #ff4d4f;
@@ -570,13 +767,13 @@ const uploadUrl = getUploadUrl();
   // 评论列表样式
   .comment-list {
     width: 100%;
-    padding: 10px 0;
+    padding: 6px 0;
 
     .comment-item {
       display: flex;
       gap: 12px;
-      padding: 16px 0;
-      border-bottom: 1px solid #f5f5f5;
+      padding: 18px 0;
+      border-bottom: 1px solid #f1f5f9;
       width: 100%;
 
       &:last-child {
@@ -696,14 +893,26 @@ const uploadUrl = getUploadUrl();
 
 // 响应式适配
 @media screen and (max-width: 768px) {
+  .user-profile-container {
+    padding: 12px;
+  }
+
   .user-banner {
-    padding: 20px 15px;
+    padding: 22px 18px;
     height: auto;
 
     .user-info-box {
       flex-direction: column;
       align-items: flex-start;
       gap: 15px;
+
+      .text-area {
+        width: 100%;
+
+        .nickname {
+          font-size: 26px;
+        }
+      }
 
       .edit-profile-btn {
         margin-left: 0;
@@ -713,9 +922,27 @@ const uploadUrl = getUploadUrl();
     }
   }
 
+  .chain-hub {
+    margin: 14px auto 0;
+    padding: 18px;
+
+    .chain-hub__intro h2 {
+      font-size: 18px;
+    }
+
+    .chain-hub__tips {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .content-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    padding: 10px;
+    padding: 14px;
+  }
+
+  .content-tabs {
+    padding: 0 10px;
+    overflow-x: auto;
   }
 }
 </style>

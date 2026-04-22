@@ -104,7 +104,7 @@ public class MilvusVectorUtil {
             List<Long> goodsIds = new ArrayList<>();
             List<SearchResultsWrapper.IDScore> scoreList = resultsWrapper.getIDScore(0);
 
-            // 相似度阈值：仅保留≥0.6的商品
+            // 相似度阈值：仅保留≥0.5的商品
             double SIMILARITY_THRESHOLD = 0.5;
             for (SearchResultsWrapper.IDScore idScore : scoreList) {
                 double similarity = idScore.getScore();

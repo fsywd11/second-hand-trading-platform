@@ -9,18 +9,15 @@ import org.example.goods.POJO.Goods;
 import org.example.goods.POJO.GoodsImage;
 import org.example.goods.VO.GoodsDetailVO;
 import org.example.goods.VO.GoodsVO;
-import org.example.order.POJO.OrderInfo;
 import org.example.product.constant.GoodsIsNewEnum;
 import org.example.product.constant.GoodsStatusEnum;
 import org.example.product.mapper.GoodsCollectMapper;
 import org.example.product.mapper.GoodsMapper;
-import org.example.product.mapper.OrderTraceMapper;
 import org.example.product.mapper.ShopCategoryMapper;
 import org.example.product.mapper.UserMapper;
 import org.example.product.service.ProductDomainService;
 import org.example.trace.command.TraceRecordCommand;
 import org.example.trace.constant.TraceEntityType;
-import org.example.trace.model.TraceAnchorInfo;
 import org.example.trace.model.TraceabilityVO;
 import org.example.trace.support.TraceabilityChainService;
 import org.example.trace.util.TraceSnapshotFactory;
@@ -40,28 +37,22 @@ public class ProductDomainServiceImpl implements ProductDomainService {
 
     private static final String SOURCE_SERVICE = "service-product";
     private static final String EVENT_GOODS_PUBLISHED = "GOODS_PUBLISHED";
-    private static final String EVENT_GOODS_UPDATED = "GOODS_UPDATED";
-    private static final String EVENT_GOODS_STATUS_CHANGED = "GOODS_STATUS_CHANGED";
-    private static final String EVENT_GOODS_DELETED = "GOODS_DELETED";
 
     private final GoodsMapper goodsMapper;
     private final UserMapper userMapper;
     private final ShopCategoryMapper shopCategoryMapper;
     private final GoodsCollectMapper goodsCollectMapper;
-    private final OrderTraceMapper orderTraceMapper;
     private final TraceabilityChainService traceabilityChainService;
 
     public ProductDomainServiceImpl(GoodsMapper goodsMapper,
                                     UserMapper userMapper,
                                     ShopCategoryMapper shopCategoryMapper,
                                     GoodsCollectMapper goodsCollectMapper,
-                                    OrderTraceMapper orderTraceMapper,
                                     TraceabilityChainService traceabilityChainService) {
         this.goodsMapper = goodsMapper;
         this.userMapper = userMapper;
         this.shopCategoryMapper = shopCategoryMapper;
         this.goodsCollectMapper = goodsCollectMapper;
-        this.orderTraceMapper = orderTraceMapper;
         this.traceabilityChainService = traceabilityChainService;
     }
 
@@ -82,7 +73,7 @@ public class ProductDomainServiceImpl implements ProductDomainService {
         recordGoodsEvent(goodsMapper.findById(goods.getId()),
                 goodsMapper.findGoodsImagesByGoodsId(goods.getId()),
                 EVENT_GOODS_PUBLISHED,
-                "商品发布生成唯一标识并上链存证");
+                "商品发布后生成唯一链上凭证");
     }
 
     @Override
@@ -139,10 +130,6 @@ public class ProductDomainServiceImpl implements ProductDomainService {
         if (goodsDTO.getImageList() != null && !goodsDTO.getImageList().isEmpty()) {
             goodsMapper.insertGoodsImages(goods.getId(), goodsDTO.getImageList());
         }
-        recordGoodsEvent(goodsMapper.findById(goods.getId()),
-                goodsMapper.findGoodsImagesByGoodsId(goods.getId()),
-                EVENT_GOODS_UPDATED,
-                "商品关键信息修改后重新上链存证");
     }
 
     @Override
@@ -152,8 +139,6 @@ public class ProductDomainServiceImpl implements ProductDomainService {
         if (goods == null) {
             throw new IllegalArgumentException("商品不存在");
         }
-        List<GoodsImage> images = goodsMapper.findGoodsImagesByGoodsId(id);
-        recordGoodsEvent(goods, images, EVENT_GOODS_DELETED, "商品删除前保留链上存证");
         goodsMapper.deleteGoodsImagesByGoodsId(id);
         goodsMapper.delete(id);
     }
@@ -166,10 +151,6 @@ public class ProductDomainServiceImpl implements ProductDomainService {
         if (goods == null) {
             throw new IllegalArgumentException("商品不存在");
         }
-        recordGoodsEvent(goods,
-                goodsMapper.findGoodsImagesByGoodsId(id),
-                EVENT_GOODS_STATUS_CHANGED,
-                "商品状态变更已上链");
     }
 
     @Override
@@ -222,7 +203,7 @@ public class ProductDomainServiceImpl implements ProductDomainService {
         return traceabilityChainService.getTraceability(
                 TraceEntityType.GOODS.getCode(),
                 id,
-                resolveGoodsSnapshot(goods, goodsMapper.findGoodsImagesByGoodsId(id))
+                TraceSnapshotFactory.buildGoodsSnapshot(goods, goodsMapper.findGoodsImagesByGoodsId(id))
         );
     }
 
@@ -240,29 +221,8 @@ public class ProductDomainServiceImpl implements ProductDomainService {
         command.setSummary(summary);
         command.setEventTime(goods.getUpdateTime() != null ? goods.getUpdateTime() : goods.getCreateTime());
         command.setTraceIdPrefix(TraceEntityType.GOODS.getPrefix());
-        command.setSnapshot(resolveGoodsSnapshot(goods, imageList));
+        command.setSnapshot(TraceSnapshotFactory.buildGoodsSnapshot(goods, imageList));
         traceabilityChainService.recordEvent(command);
-    }
-
-    private java.util.Map<String, Object> resolveGoodsSnapshot(Goods goods, List<GoodsImage> imageList) {
-        OrderInfo latestOrder = resolveLatestOrder(goods == null ? null : goods.getId());
-        String orderTraceId = latestOrder == null ? null : resolveOrderTraceId(latestOrder.getId());
-        return TraceSnapshotFactory.buildGoodsSnapshot(goods, imageList, latestOrder, orderTraceId);
-    }
-
-    private OrderInfo resolveLatestOrder(Integer goodsId) {
-        if (goodsId == null) {
-            return null;
-        }
-        return orderTraceMapper.findLatestByGoodsId(goodsId);
-    }
-
-    private String resolveOrderTraceId(Integer orderId) {
-        if (orderId == null) {
-            return null;
-        }
-        TraceAnchorInfo anchorInfo = traceabilityChainService.getAnchorInfo(TraceEntityType.ORDER.getCode(), orderId);
-        return anchorInfo == null ? null : anchorInfo.getTraceId();
     }
 
     private Integer resolveGoodsStatus(Integer stock, Integer currentStatus) {
@@ -275,3 +235,4 @@ public class ProductDomainServiceImpl implements ProductDomainService {
         return currentStatus;
     }
 }
+

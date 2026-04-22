@@ -1,1 +1,0 @@
-import{Q as l,f as t,k as r,r as s,o as u}from"./index-GrxChAQR.js";const d=l({__name:"Calendar",setup(m){const e=t(new Date);return(p,a)=>{const o=s("el-calendar");return u(),r(o,{modelValue:e.value,"onUpdate:modelValue":a[0]||(a[0]=n=>e.value=n)},null,8,["modelValue"])}}});export{d as default};

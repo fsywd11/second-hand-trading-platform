@@ -230,7 +230,7 @@ const submitOrder = async () => {
       sellerId: goodsDetail.value.sellerId, // 从商品详情获取卖家ID
       goodsId: goodsId.value,
       addressId: selectedAddress.value.id,
-      goodsNum: goodsDetail.value.stock || 1, // 二手商品默认数量为1
+      goodsNum: 1, // 每次下单默认购买 1 件
       remark: remark.value,
       // ========== 新增：添加requestId到请求参数 ==========
       requestId: requestId

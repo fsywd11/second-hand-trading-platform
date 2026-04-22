@@ -2,9 +2,9 @@
 import axios from 'axios';
 import {ElMessage} from 'element-plus'
 import useUserInfoStore from '@/stores/userInfo.js'
-import { getApiBasePath } from '@/utils/serviceUrls.js'
+import { getGatewayBaseUrl } from '@/utils/serviceUrls.js'
 //定义一个变量,记录公共的前缀  ,  baseURL
-const baseURL = getApiBasePath();
+const baseURL = getGatewayBaseUrl();
 //创建axios实例
 const instance = axios.create({
     baseURL: baseURL,

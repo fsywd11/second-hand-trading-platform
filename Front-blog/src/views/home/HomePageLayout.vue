@@ -401,9 +401,12 @@ const goToAIChat = () => {
 
       <el-main style="padding: 0;margin: 0;">
         <Loading />
-        <router-view v-slot="{ Component, loading }">
+        <router-view v-slot="{ Component, loading, route: currentRoute }">
           <template v-if="loading">
             <Loading />
+          </template>
+          <template v-else-if="currentRoute?.meta?.keepAlive === false">
+            <component :is="Component" :key="currentRoute.fullPath" />
           </template>
           <template v-else>
             <keep-alive>

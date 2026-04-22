@@ -13,6 +13,11 @@ import com.itheima.pojo.Enum.GoodsStatusEnum;
 import org.example.goods.POJO.Goods;
 import org.example.goods.POJO.GoodsImage;
 import org.example.common.PageBean;
+import org.example.trace.command.TraceRecordCommand;
+import org.example.trace.constant.TraceEntityType;
+import org.example.trace.model.TraceabilityVO;
+import org.example.trace.support.TraceabilityChainService;
+import org.example.trace.util.TraceSnapshotFactory;
 import org.example.user.POJO.User;
 import com.itheima.service.CampusKnowledgeGraphService;
 import com.itheima.service.GoodsService;
@@ -63,6 +68,13 @@ public class GoodsServiceImpl implements GoodsService {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private TraceabilityChainService traceabilityChainService;
+
+    private static final String EVENT_GOODS_PUBLISHED = "GOODS_PUBLISHED";
+    private static final String SOURCE_SERVICE = "service-goods";
+
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void add(GoodsDTO goodsDTO) {
@@ -92,6 +104,11 @@ public class GoodsServiceImpl implements GoodsService {
         if (imageList != null && !imageList.isEmpty()) {
             goodsMapper.insertGoodsImages(goods.getId(), imageList);
         }
+
+        recordGoodsEvent(goodsMapper.findById(goods.getId()),
+                goodsMapper.findGoodsImagesByGoodsId(goods.getId()),
+                EVENT_GOODS_PUBLISHED,
+                "商品发布后生成唯一链上凭证");
 
         // 生成商品向量并入库（精简文本，仅保留名称+描述）
         try {
@@ -248,7 +265,6 @@ public class GoodsServiceImpl implements GoodsService {
         GoodsDetailVO vo = new GoodsDetailVO();
         BeanUtils.copyProperties(goods, vo);
 
-        // 查询商品图片
         List<GoodsImage> imageList = goodsMapper.findGoodsImagesByGoodsId(id);
         vo.setImageList(imageList);
 
@@ -260,16 +276,24 @@ public class GoodsServiceImpl implements GoodsService {
             vo.setDiscount("无折扣");
         }
 
-        vo.setCategoryName(shopCategoryMapper.findById(goods.getCategoryId()).getCategoryName());
+        // 空指针防护
+        if (shopCategoryMapper.findById(goods.getCategoryId()) != null) {
+            vo.setCategoryName(shopCategoryMapper.findById(goods.getCategoryId()).getCategoryName());
+        }
+
         vo.setIsNewName(GoodsIsNewEnum.getNameByCode(goods.getIsNew()));
         vo.setGoodsStatus(goods.getGoodsStatus());
         vo.setGoodsStatusName(GoodsStatusEnum.getNameByCode(goods.getGoodsStatus()));
 
+        // 空指针防护
         User seller = userMapper.findById(vo.getSellerId());
-        vo.setSellerNickname(seller.getNickname());
-        vo.setSellerAvatar(seller.getUserPic());
-        vo.setCollectCount(goodsCollectMapper.allList(id));
+        if (seller != null) {
+            vo.setSellerNickname(seller.getNickname());
+            vo.setSellerAvatar(seller.getUserPic());
+        }
 
+        vo.setCollectCount(goodsCollectMapper.allList(id));
+        vo.setTraceability(traceById(id));
         return vo;
     }
 
@@ -300,13 +324,21 @@ public class GoodsServiceImpl implements GoodsService {
             goodsMapper.insertGoodsImages(goods.getId(), imageList);
         }
 
+        // ====================== 【修复点】======================
+        // 商品修改后，重新生成溯源记录（关键！）
+        recordGoodsEvent(
+                goodsMapper.findById(goods.getId()),
+                goodsMapper.findGoodsImagesByGoodsId(goods.getId()),
+                "GOODS_UPDATED",
+                "商品信息修改，更新链上凭证"
+        );
+        // ======================================================
+
         // 更新商品向量（先删旧向量，再插新向量）
         try {
             Long goodsId = Long.valueOf(goods.getId());
-            // 核心修复：先删除旧向量，避免重复
             milvusVectorUtil.deleteGoodsVector(goodsId);
 
-            // 精简文本，提升检索精度
             String goodsText = String.format(
                     "二手商品：%s，描述：%s",
                     goods.getGoodsName(),
@@ -480,6 +512,36 @@ public class GoodsServiceImpl implements GoodsService {
         return pb;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<GoodsVO> listByIds(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<GoodsVO> goodsVOS = goodsMapper.listByIds(ids);
+        for (GoodsVO goodsVO : goodsVOS) {
+            goodsVO.setImageList(goodsMapper.findGoodsImagesByGoodsId(goodsVO.getId()));
+            goodsVO.setCollectCount(goodsCollectMapper.allList(goodsVO.getId()));
+            goodsVO.setIsNewName(GoodsIsNewEnum.getNameByCode(goodsVO.getIsNew()));
+            goodsVO.setGoodsStatusName(GoodsStatusEnum.getNameByCode(goodsVO.getGoodsStatus()));
+        }
+        return goodsVOS;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TraceabilityVO traceById(Integer id) {
+        Goods goods = goodsMapper.findById(id);
+        if (goods == null) {
+            throw new IllegalArgumentException("商品不存在");
+        }
+        return traceabilityChainService.getTraceability(
+                TraceEntityType.GOODS.getCode(),
+                id,
+                TraceSnapshotFactory.buildGoodsSnapshot(goods, goodsMapper.findGoodsImagesByGoodsId(id))
+        );
+    }
+
     // ========== 私有辅助方法 ==========
 
     /**
@@ -618,6 +680,8 @@ public class GoodsServiceImpl implements GoodsService {
         return filteredList;
     }
 
+
+
     /**
      * 覆盖原有filterAndSupplementGoods方法，增加分类过滤
      */
@@ -684,5 +748,34 @@ public class GoodsServiceImpl implements GoodsService {
             pageData = allData.subList(start, end);
         }
         return pageData;
+    }
+
+
+    private void recordGoodsEvent(Goods goods, List<GoodsImage> imageList, String eventType, String summary) {
+        if (goods == null) {
+            return;
+        }
+        TraceRecordCommand command = new TraceRecordCommand();
+        command.setEntityType(TraceEntityType.GOODS.getCode());
+        command.setEntityId(goods.getId());
+        command.setBusinessNo("GOODS-" + goods.getId());
+        command.setEventType(eventType);
+        command.setOperatorId(goods.getSellerId());
+        command.setSourceService(SOURCE_SERVICE);
+        command.setSummary(summary);
+        command.setEventTime(goods.getUpdateTime() != null ? goods.getUpdateTime() : goods.getCreateTime());
+        command.setTraceIdPrefix(TraceEntityType.GOODS.getPrefix());
+        command.setSnapshot(TraceSnapshotFactory.buildGoodsSnapshot(goods, imageList));
+        traceabilityChainService.recordEvent(command);
+    }
+
+    private Integer resolveGoodsStatus(Integer stock, Integer currentStatus) {
+        if (stock != null && stock <= 0) {
+            return GoodsStatusEnum.SOLD_OUT.getCode();
+        }
+        if (stock != null && stock > 0 && (currentStatus == null || Objects.equals(currentStatus, GoodsStatusEnum.SOLD_OUT.getCode()))) {
+            return GoodsStatusEnum.ON_SALE.getCode();
+        }
+        return currentStatus;
     }
 }

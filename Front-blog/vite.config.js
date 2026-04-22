@@ -6,7 +6,7 @@ import AutoImport from 'unplugin-auto-import/vite'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiPrefix = env.VITE_API_PREFIX || env.VITE_API_BASENET_URL || '/api'
+  const apiPrefix = env.VITE_API_PREFIX || env.VITE_API_BASENET_URL || '/api/backAll'
   const proxyTarget = env.VITE_API_PROXY_TARGET || env.VITE_API_BASE_URL || 'http://localhost:9000'
 
   return {

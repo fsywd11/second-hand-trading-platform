@@ -13,6 +13,7 @@ import {
 import useUserInfoStore from '@/stores/userInfo.js';
 import { userInfoServices } from '@/api/user.js';
 import { createChatSessionService } from "@/api/chat.js";
+import TraceSnapshotView from "@/components/TraceSnapshotView.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -183,6 +184,44 @@ const orderDetail = ref({});
 const detailLoading = ref(false);
 const orderTraceInfo = computed(() => orderDetail.value?.traceability || {});
 const orderTraceRecords = computed(() => Array.isArray(orderTraceInfo.value.records) ? orderTraceInfo.value.records : []);
+const traceIsVerified = computed(() => {
+  if (!orderTraceInfo.value?.traceId) return false;
+  if (typeof orderTraceInfo.value?.verified === 'boolean') {
+    return orderTraceInfo.value.verified;
+  }
+  return orderTraceInfo.value?.latestPayloadHash && orderTraceInfo.value?.currentPayloadHash
+    ? orderTraceInfo.value.latestPayloadHash === orderTraceInfo.value.currentPayloadHash
+    : false;
+});
+const traceCurrentStepText = computed(() => {
+  if (!orderTraceInfo.value?.traceId) return '--';
+  return formatTraceEvent(orderTraceInfo.value.latestEventType);
+});
+const traceOverviewCards = computed(() => ([
+  {
+    label: '链上编号',
+    value: orderTraceInfo.value?.traceId || '--',
+    helper: orderTraceInfo.value?.traceId ? '已登记唯一凭证' : '交易完成后自动生成',
+    code: true
+  },
+  {
+    label: '当前阶段',
+    value: traceCurrentStepText.value,
+    helper: `累计 ${orderTraceRecords.value.length || 0} 个存证节点`
+  },
+  {
+    label: '链上哈希',
+    value: formatHashPreview(orderTraceInfo.value?.latestPayloadHash),
+    helper: '最新上链快照摘要',
+    code: true
+  },
+  {
+    label: '当前哈希',
+    value: formatHashPreview(orderTraceInfo.value?.currentPayloadHash),
+    helper: traceIsVerified.value ? '当前订单数据与链上记录一致' : '当前订单数据待核验或存在差异',
+    code: true
+  }
+]));
 
 const showOrderDetail = async (row) => {
   dialogVisible.value = true;
@@ -213,15 +252,6 @@ const formatHashPreview = (value) => {
   return value.length > 24 ? `${value.slice(0, 12)}...${value.slice(-8)}` : value;
 };
 
-const formatPayloadJson = (payloadJson) => {
-  if (!payloadJson) return '--';
-  try {
-    return JSON.stringify(JSON.parse(payloadJson), null, 2);
-  } catch (error) {
-    return payloadJson;
-  }
-};
-
 const getTraceStatusType = (trace) => {
   if (!trace?.traceId) return 'info';
   return trace.verified ? 'success' : 'danger';
@@ -246,6 +276,18 @@ const getRecordVerifyText = (record) => {
 };
 
 // 支付订单
+const getRecordTimelineType = (record) => {
+  if (record?.blockVerified && record?.previousLinkVerified) return 'success';
+  if (record?.blockVerified || record?.previousLinkVerified) return 'warning';
+  return 'danger';
+};
+
+const getRecordTimelineText = (record) => {
+  if (record?.blockVerified && record?.previousLinkVerified) return '链路完整';
+  if (record?.blockVerified || record?.previousLinkVerified) return '部分通过';
+  return '待核验';
+};
+
 const handlePay = async (row) => {
   if (row.orderStatus !== 1) {
     ElMessage.error('只有待付款订单可以支付');
@@ -757,6 +799,115 @@ watch(
         <div v-if="orderDetail.remark" class="remark-content">
           {{ orderDetail.remark }}
         </div>
+
+        <div class="section-title">链上凭证</div>
+        <div class="order-trace-card" :class="{ empty: !orderTraceInfo.traceId }">
+          <div class="order-trace-head">
+            <div>
+              <div class="trace-eyebrow">Blockchain Evidence</div>
+              <div class="trace-title">订单交易、状态变化与权属依据均已生成哈希存证</div>
+            </div>
+            <el-tag :type="getTraceStatusType(orderTraceInfo)" effect="dark">
+              {{ getTraceStatusText(orderTraceInfo) }}
+            </el-tag>
+          </div>
+
+          <template v-if="orderTraceInfo.traceId">
+            <div class="trace-hero">
+              <div class="trace-hero__main">
+                <div class="trace-hero__label">可信状态</div>
+                <div class="trace-hero__headline">
+                  {{ traceIsVerified ? '链上凭证校验通过' : '链上凭证待进一步核验' }}
+                </div>
+                <p class="trace-hero__desc">
+                  {{ orderTraceInfo.message || '订单关键节点已生成链上存证，可结合时间线和结构化快照快速查看交易过程。' }}
+                </p>
+                <div class="trace-hero__chips">
+                  <span class="trace-chip" :class="{ success: traceIsVerified, danger: !traceIsVerified }">
+                    {{ traceIsVerified ? '数据一致' : '存在差异' }}
+                  </span>
+                  <span class="trace-chip">最新版本 V{{ orderTraceInfo.latestVersion || 0 }}</span>
+                  <span class="trace-chip">{{ traceCurrentStepText }}</span>
+                </div>
+              </div>
+              <div class="trace-verify-panel" :class="{ verified: traceIsVerified, danger: !traceIsVerified }">
+                <div class="trace-verify-panel__label">核验结果</div>
+                <strong>{{ traceIsVerified ? '可信' : '需关注' }}</strong>
+                <span>{{ traceIsVerified ? '当前订单快照与链上摘要一致' : '建议查看时间线和快照确认数据来源' }}</span>
+              </div>
+            </div>
+
+            <div class="trace-summary-grid upgraded">
+              <div class="trace-summary-item">
+                <span>订单链编号</span>
+                <strong class="trace-code">{{ orderTraceInfo.traceId }}</strong>
+              </div>
+              <div class="trace-summary-item">
+                <span>最新事件</span>
+                <strong>{{ formatTraceEvent(orderTraceInfo.latestEventType) }}</strong>
+                <small>V{{ orderTraceInfo.latestVersion || 0 }}</small>
+              </div>
+              <div class="trace-summary-item">
+                <span>链上数据哈希</span>
+                <strong class="trace-code">{{ formatHashPreview(orderTraceInfo.latestPayloadHash) }}</strong>
+              </div>
+              <div class="trace-summary-item">
+                <span>当前数据哈希</span>
+                <strong class="trace-code">{{ formatHashPreview(orderTraceInfo.currentPayloadHash) }}</strong>
+              </div>
+            </div>
+
+            <el-alert
+                :title="orderTraceInfo.message || '链上凭证可作为纠纷处理时的可信依据'"
+                :type="getTraceAlertType(orderTraceInfo)"
+                :closable="false"
+                show-icon
+            />
+
+            <p class="trace-note">
+              平台与卖家均无法改写既有区块哈希；若商品或订单数据被篡改，当前哈希会与链上最新哈希不一致。
+            </p>
+
+            <div class="trace-guide">
+              <span class="trace-guide__title">推荐阅读顺序</span>
+              <span>先看可信状态和当前阶段，再顺着时间线查看每个节点，最后按需展开结构化快照。</span>
+            </div>
+
+            <div class="trace-record-list trace-timeline" v-if="orderTraceRecords.length">
+              <div
+                  v-for="record in orderTraceRecords"
+                  :key="`${record.version}-${record.txHash}`"
+                  class="trace-record"
+              >
+                <div class="trace-record-top">
+                  <div>
+                    <span class="trace-version">V{{ record.version }}</span>
+                    <strong>{{ formatTraceEvent(record.eventType) }}</strong>
+                    <small>{{ formatTraceTime(record.createTime) }}</small>
+                  </div>
+                  <el-tag :type="getRecordVerifyType(record)" size="small">
+                    {{ getRecordVerifyText(record) }}
+                  </el-tag>
+                </div>
+                <p>{{ record.summary || '暂无事件摘要' }}</p>
+                <div class="trace-record-grid">
+                  <span>交易哈希：<b class="trace-code">{{ formatHashPreview(record.txHash) }}</b></span>
+                  <span>区块哈希：<b class="trace-code">{{ formatHashPreview(record.blockHash) }}</b></span>
+                  <span>数据哈希：<b class="trace-code">{{ formatHashPreview(record.payloadHash) }}</b></span>
+                  <span>来源服务：{{ record.sourceService || '--' }}</span>
+                </div>
+                <details class="trace-payload">
+                  <summary>查看链上快照</summary>
+                  <TraceSnapshotView :payload-json="record.payloadJson" />
+                </details>
+              </div>
+            </div>
+          </template>
+
+          <div v-else class="trace-empty-text">
+            当前订单尚未生成链上凭证，完成创建、支付或收货等交易节点后会自动记录。
+          </div>
+        </div>
       </div>
       <template #footer>
         <el-button size="small" @click="dialogVisible = false">关闭</el-button>
@@ -1167,4 +1318,455 @@ watch(
       }
 
       .goods-detail-num {
-      
+        font-size: 13px;
+        color: #999;
+      }
+    }
+  }
+
+  .remark-content {
+    padding: 10px;
+    background-color: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: 4px;
+    color: #d48806;
+    font-size: 13px;
+  }
+
+  .order-trace-card {
+    border: 1px solid #d8efe3;
+    border-radius: 14px;
+    padding: 14px;
+    background: linear-gradient(135deg, #f4fff8 0%, #ffffff 62%, #eef7ff 100%);
+
+    &.empty {
+      border-style: dashed;
+      background: #fafafa;
+    }
+  }
+
+  .order-trace-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .trace-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: #0f9f6e;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .trace-title {
+    color: #163b2d;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .trace-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(220px, 0.9fr);
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .trace-hero__main,
+  .trace-verify-panel {
+    border-radius: 14px;
+    padding: 14px 16px;
+    border: 1px solid rgba(77, 171, 128, 0.16);
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .trace-hero__label,
+  .trace-verify-panel__label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 6px;
+  }
+
+  .trace-hero__headline {
+    font-size: 18px;
+    font-weight: 700;
+    color: #163b2d;
+    line-height: 1.4;
+  }
+
+  .trace-hero__desc,
+  .trace-verify-panel span {
+    margin: 8px 0 0;
+    color: #4b5563;
+    line-height: 1.7;
+    font-size: 13px;
+  }
+
+  .trace-hero__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .trace-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    border: 1px solid #e2e8f0;
+
+    &.success {
+      background: #ecfdf5;
+      color: #047857;
+      border-color: #a7f3d0;
+    }
+
+    &.danger {
+      background: #fff1f2;
+      color: #be123c;
+      border-color: #fecdd3;
+    }
+  }
+
+  .trace-verify-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    strong {
+      font-size: 24px;
+      color: #166534;
+      line-height: 1.2;
+    }
+
+    &.danger strong {
+      color: #b91c1c;
+    }
+  }
+
+  .trace-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+
+    &.upgraded .trace-summary-item {
+      padding: 14px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+    }
+  }
+
+  .trace-summary-item {
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(77, 171, 128, 0.16);
+
+    span,
+    small {
+      display: block;
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    strong {
+      display: block;
+      color: #1f2937;
+      font-size: 13px;
+      margin-top: 4px;
+      word-break: break-all;
+    }
+  }
+
+  .trace-code {
+    font-family: "Courier New", monospace;
+  }
+
+  .trace-note,
+  .trace-empty-text {
+    margin: 10px 0 0;
+    color: #4b5563;
+    line-height: 1.7;
+    font-size: 13px;
+  }
+
+  .trace-guide {
+    margin-top: 12px;
+    margin-bottom: 4px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px dashed rgba(15, 138, 95, 0.24);
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  .trace-guide__title {
+    display: inline-block;
+    margin-right: 8px;
+    color: #0f8a5f;
+    font-weight: 700;
+  }
+
+  .trace-record-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    &.trace-timeline {
+      position: relative;
+      padding-left: 12px;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 18px;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        background: linear-gradient(180deg, rgba(15, 138, 95, 0.18), rgba(59, 130, 246, 0.15));
+      }
+    }
+  }
+
+  .trace-record {
+    position: relative;
+    padding: 12px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    margin-left: 18px;
+
+    p {
+      margin: 8px 0;
+      color: #4b5563;
+      line-height: 1.6;
+    }
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: -22px;
+      top: 18px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 0 4px #ecfdf5;
+    }
+  }
+
+  .trace-record-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+
+    strong,
+    small {
+      margin-left: 8px;
+    }
+
+    small {
+      color: #8a8f98;
+    }
+  }
+
+  .trace-version {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #e7f8ee;
+    color: #0f8a5f;
+    font-weight: 700;
+    font-size: 12px;
+  }
+
+  .trace-record-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    color: #6b7280;
+    font-size: 12px;
+
+    span {
+      word-break: break-all;
+    }
+  }
+
+  .trace-payload {
+    margin-top: 8px;
+
+    summary {
+      cursor: pointer;
+      color: #0f8a5f;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    pre {
+      margin: 8px 0 0;
+      padding: 10px;
+      max-height: 220px;
+      overflow: auto;
+      background: #0f172a;
+      color: #e5e7eb;
+      border-radius: 8px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .trace-hero,
+    .trace-summary-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .trace-record-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+// 退款表单样式
+.refund-form {
+  margin-top: 8px;
+
+  :deep(.el-form-item) {
+    margin-bottom: 12px;
+
+    .el-form-item__label {
+      font-size: 13px;
+    }
+
+    .el-form-item__content {
+      line-height: 1.5;
+      font-size: 13px;
+    }
+  }
+}
+
+:deep(.el-descriptions) {
+  font-size: 13px;
+
+  .el-descriptions__label {
+    font-weight: 500;
+    width: 80px;
+    padding: 10px 8px;
+  }
+
+  .el-descriptions__content {
+    padding: 10px 8px;
+  }
+}
+
+// 弹窗样式优化
+:deep(.el-dialog) {
+  border-radius: 16px;
+  margin: 10vh auto 0;
+
+  .el-dialog__header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f5f5f5;
+
+    .el-dialog__title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .el-dialog__headerbtn {
+      top: 12px;
+    }
+  }
+
+  .el-dialog__body {
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .el-dialog__footer {
+    padding: 8px 16px 12px;
+    border-top: 1px solid #f5f5f5;
+    text-align: center;
+
+    button {
+      font-size: 14px;
+      padding: 8px 20px;
+      margin: 0 4px;
+    }
+  }
+}
+
+// 空状态优化
+:deep(.el-empty) {
+  padding: 40px 0;
+
+  .el-empty__description {
+    font-size: 14px;
+    margin-top: 12px;
+  }
+
+  button {
+    margin-top: 16px;
+    font-size: 14px;
+  }
+}
+
+// 适配不同屏幕尺寸
+@media (max-width: 375px) {
+  .query-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .goods-content .goods-cover {
+    width: 60px;
+    height: 60px;
+  }
+
+  .action-btn-group {
+    justify-content: space-between !important;
+  }
+
+  .action-btn {
+    flex: 1;
+    text-align: center;
+    padding: 4px 6px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  // 大屏恢复原有样式
+  .status-tabs-wrapper {
+
+    :deep(.el-tabs__nav) {
+      justify-content: center;
+      width: 100%;
+    }
+  }
+
+  .order-detail-content {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  :deep(.el-descriptions) {
+    :nth-child(1) {
+      grid-column: span 2;
+    }
+  }
+}
+</style>

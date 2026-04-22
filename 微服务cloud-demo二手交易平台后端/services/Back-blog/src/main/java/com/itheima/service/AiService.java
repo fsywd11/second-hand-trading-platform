@@ -7,5 +7,5 @@ import java.math.BigDecimal;
 
 public interface AiService {
     Flux<String> getAiResponse(String message, String blogContext);
-    public String generateGoodsDesc(String keywords, String goodsName, Integer isNew, BigDecimal sellPrice);
+    String generateGoodsDesc(String keywords, String goodsName, Integer isNew, BigDecimal sellPrice);
 }

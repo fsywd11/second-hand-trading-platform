@@ -15,9 +15,8 @@ export const goodsDetailService = (id)=>{
     return request.post(`/api/backAll/goods/detail/${id}`)
 }
 
-// 鍟嗗搧婧簮璁板綍鏌ヨ
 export const goodsTraceService = (id)=>{
-    return request.get(`/api/product/goods/trace/${id}`)
+    return request.get(`/api/backAll/goods/trace/${id}`)
 }
 
 // 商品修改

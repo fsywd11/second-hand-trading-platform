@@ -153,7 +153,7 @@ const uploadFile = (file: File): Promise<string> => {
       if (xhr.status === 200) {
         try {
           const response = JSON.parse(xhr.responseText)
-          resolve(response.data)
+          resolve(response.data?.url || response.data)
         } catch (error) {
           reject(new Error('解析上传结果失败'))
         }

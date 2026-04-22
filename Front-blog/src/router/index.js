@@ -139,6 +139,7 @@ const routes = [
                 path: '/trade/goods/audit',
                 name: 'TradeGoodsAudit',
                 meta: {
+                    keepAlive: false,
                     title: '商品发布'
                 },
                 component: ()=>import("@/views/trade/TradeGoodsAudit.vue")
@@ -166,6 +167,7 @@ const routes = [
                  path: '/trade/goods/edit',
                  name: 'TradeGoodsEdit',
                  meta: {
+                     keepAlive: false,
                      title: '商品编辑'
                  },
                  component: ()=>import("@/views/trade/TradeGoodsEdits.vue")
@@ -273,6 +275,7 @@ const routes = [
                 path: '/homes/goodsEdit',
                 name: 'HomesEdit',
                 meta:{
+                    keepAlive: false,
                     title:'编辑商品'
                 },
                 component: ()=>import("@/views/home/HomesGoodsEdit.vue")
@@ -335,6 +338,7 @@ const routes = [
                 path: '/homes/publish',
                 name: 'HomesPublish',
                 meta:{
+                    keepAlive: false,
                     title:'发布商品'
                 },
                 component: ()=>import("@/views/home/HomesPublish.vue")

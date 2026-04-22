@@ -2,7 +2,7 @@ const trimTrailingSlash = (value = '') => value.replace(/\/+$/, '')
 
 const env = import.meta.env
 
-const apiPrefix = env.VITE_API_PREFIX || env.VITE_API_BASENET_URL || '/api'
+const apiPrefix = env.VITE_API_PREFIX || env.VITE_API_BASENET_URL || '/api/backAll'
 const gatewayBaseUrl = trimTrailingSlash(env.VITE_API_BASE_URL || '')
 
 const joinUrl = (base, path) => {
@@ -18,6 +18,8 @@ export const getApiBasePath = () => {
   }
   return apiPrefix.startsWith('/') ? trimTrailingSlash(apiPrefix) : `/${trimTrailingSlash(apiPrefix)}`
 }
+
+export const getGatewayBaseUrl = () => gatewayBaseUrl
 
 export const getUploadUrl = () => {
   const customUploadUrl = env.VITE_UPLOAD_URL
@@ -40,7 +42,7 @@ export const getAiChatUrl = () => {
   if (customAiChatUrl) {
     return customAiChatUrl
   }
-  return `${getApiBasePath()}/ai/chat`
+  return joinUrl(gatewayBaseUrl, `${getApiBasePath()}/ai/chat`)
 }
 
 export const getGatewayWsBaseUrl = () => {

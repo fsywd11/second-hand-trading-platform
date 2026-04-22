@@ -430,8 +430,11 @@ onMounted(() => {
 
         <el-main>
           <Loading />
-          <router-view v-slot="{ Component }">
+          <router-view v-slot="{ Component, route: currentRoute }">
             <Loading v-if="loadingStore.isLoading"/>
+            <template v-else-if="currentRoute?.meta?.keepAlive === false">
+              <component :is="Component" :key="currentRoute.fullPath" />
+            </template>
             <template v-else>
               <keep-alive>
                 <component :is="Component" />

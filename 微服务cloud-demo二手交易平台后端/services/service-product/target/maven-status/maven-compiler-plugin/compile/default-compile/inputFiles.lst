@@ -11,6 +11,7 @@ D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易�
 D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易平台后端\services\service-product\src\main\java\org\example\product\interceptor\RequestTraceInterceptor.java
 D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易平台后端\services\service-product\src\main\java\org\example\product\mapper\GoodsCollectMapper.java
 D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易平台后端\services\service-product\src\main\java\org\example\product\mapper\GoodsMapper.java
+D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易平台后端\services\service-product\src\main\java\org\example\product\mapper\OrderTraceMapper.java
 D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易平台后端\services\service-product\src\main\java\org\example\product\mapper\ShopCategoryMapper.java
 D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易平台后端\services\service-product\src\main\java\org\example\product\mapper\UserMapper.java
 D:\作业\求职项目\校园二手交易平台\微服务cloud-demo二手交易平台后端\services\service-product\src\main\java\org\example\product\ProductServiceApplication.java
