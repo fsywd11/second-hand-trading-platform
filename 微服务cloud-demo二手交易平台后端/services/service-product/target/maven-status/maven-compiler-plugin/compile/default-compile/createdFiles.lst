@@ -1,6 +1,0 @@
-org\example\product\util\ThreadLocalUtil.class
-org\example\product\config\FeignAuthConfig.class
-org\example\product\config\TraceabilityConfig.class
-org\example\product\util\JwtUtil.class
-org\example\product\mapper\OrderTraceMapper.class
-org\example\product\interceptor\LoginInterceptor.class
