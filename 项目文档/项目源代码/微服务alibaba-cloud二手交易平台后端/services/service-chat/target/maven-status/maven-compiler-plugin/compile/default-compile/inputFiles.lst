@@ -1,0 +1,17 @@
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\ChatServiceApplication.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\config\ChatWebConfig.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\config\FeignAuthConfig.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\controller\ChatController.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\exception\GlobalExceptionHandler.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\exception\SentinelBlockHandler.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\feign\UserFeignClient.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\interceptor\LoginInterceptor.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\mapper\ChatMessageMapper.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\mapper\ChatSessionMapper.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\properties\ChatProperties.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\service\ChatDomainService.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\service\ChatPushGateway.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\service\impl\ChatDomainServiceImpl.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\service\impl\ChatPushGatewayImpl.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\util\JwtUtil.java
+D:\作业\笔记\cloud-demo模板\services\service-chat\src\main\java\org\example\chat\util\ThreadLocalUtil.java

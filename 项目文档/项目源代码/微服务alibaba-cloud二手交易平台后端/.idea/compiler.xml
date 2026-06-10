@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile default="true" name="Default" enabled="true" />
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="common" />
+        <module name="service-product" />
+        <module name="service-user" />
+        <module name="model" />
+        <module name="service-comment" />
+        <module name="service-order" />
+        <module name="service-chat" />
+        <module name="gateway" />
+        <module name="service-collect" />
+      </profile>
+      <profile name="Annotation profile for cloud-demo" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.34/lombok-1.18.34.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.34/lombok-1.18.34.jar" />
+        </processorPath>
+        <module name="backblog" />
+      </profile>
+      <profile name="Annotation profile for service-main" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.34/lombok-1.18.34.jar" />
+        </processorPath>
+        <module name="service-main" />
+      </profile>
+    </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="seata-account" target="17" />
+      <module name="seata-business" target="17" />
+      <module name="seata-order" target="17" />
+      <module name="seata-storage" target="17" />
+      <module name="service-search" target="17" />
+    </bytecodeTargetLevel>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="backblog" options="-parameters" />
+      <module name="cloud-demo" options="" />
+      <module name="common" options="-parameters" />
+      <module name="gateway" options="-parameters" />
+      <module name="model" options="-parameters" />
+      <module name="seata-account" options="-parameters" />
+      <module name="seata-business" options="-parameters" />
+      <module name="seata-order" options="-parameters" />
+      <module name="seata-storage" options="-parameters" />
+      <module name="service-chat" options="-parameters" />
+      <module name="service-collect" options="-parameters" />
+      <module name="service-comment" options="-parameters" />
+      <module name="service-main" options="-parameters" />
+      <module name="service-order" options="-parameters" />
+      <module name="service-product" options="-parameters" />
+      <module name="service-search" options="-parameters" />
+      <module name="service-user" options="-parameters" />
+      <module name="services" options="" />
+    </option>
+  </component>
+</project>

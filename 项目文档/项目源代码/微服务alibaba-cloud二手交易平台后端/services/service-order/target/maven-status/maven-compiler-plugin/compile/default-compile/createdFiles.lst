@@ -1,0 +1,5 @@
+org\example\order\config\FeignAuthConfig.class
+org\example\order\config\TraceabilityConfig.class
+org\example\order\util\ThreadLocalUtil.class
+org\example\order\util\JwtUtil.class
+org\example\order\interceptor\LoginInterceptor.class

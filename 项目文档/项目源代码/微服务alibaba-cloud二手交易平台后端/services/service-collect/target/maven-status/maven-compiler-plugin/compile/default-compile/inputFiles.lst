@@ -1,0 +1,14 @@
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\CollectServiceApplication.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\config\CollectWebConfig.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\config\FeignAuthConfig.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\controller\GoodsCollectController.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\exception\GlobalExceptionHandler.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\exception\SentinelBlockHandler.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\feign\ProductFeignClient.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\interceptor\LoginInterceptor.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\mapper\GoodsCollectMapper.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\properties\CollectProperties.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\service\GoodsCollectDomainService.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\service\impl\GoodsCollectDomainServiceImpl.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\util\JwtUtil.java
+D:\作业\笔记\cloud-demo模板\services\service-collect\src\main\java\org\example\collect\util\ThreadLocalUtil.java
