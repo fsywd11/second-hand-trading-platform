@@ -1,1 +1,0 @@
-import{P as t}from"./index-DfS4xEJW.js";const s=o=>t.post(`/api/goodsCollect/goodsCollect/add/${o}`),d=o=>t.delete(`/api/goodsCollect/goodsCollect/delete/${o}`),c=o=>t.get(`/api/goodsCollect/goodsCollect/list/${o}`),g=(o=1,e=10)=>t.get("/api/goodsCollect/goodsCollect/myList",{params:{pageNum:o,pageSize:e}});export{d as a,s as b,c,g};
